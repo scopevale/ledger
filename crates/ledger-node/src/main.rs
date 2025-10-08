@@ -4,7 +4,6 @@ use ledger_core::{Transaction};
 use ledger_storage::{sled_store::SledStore, Storage};
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
-use tokio::sync::RwLock;
 use tower_http::trace::TraceLayer;
 use tracing::{info, Level};
 
