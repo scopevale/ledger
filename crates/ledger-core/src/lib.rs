@@ -152,3 +152,61 @@ mod tests {
     assert_eq!(pow::count_leading_zero_bits(&h), 9);
   }
 }
+
+pub mod chain {
+  use super::*;
+  use anyhow::Result;
+  use std::sync::Arc;
+
+  /// Trait the storage backends should implement for the chain to operate.
+  /// This lives in `ledger-core` to avoid a circular dependency.
+  pub trait ChainStore: Send + Sync {
+    fn put_block(&self, block: &Block) -> Result<()>;
+    fn get_block(&self, index: u64) -> Result<Option<Block>>;
+    fn tip_height(&self) -> Result<u64>;
+    fn tip_hash(&self) -> Result<Option<Hash>>;
+  }
+
+  /// Simple chain façade that delegates persistence to a `ChainStore`.
+  #[derive(Clone)]
+  pub struct Chain<S: ChainStore> {
+    store: Arc<S>,
+  }
+
+  impl<S: ChainStore> Chain<S> {
+    pub fn new(store: Arc<S>) -> Self {
+      Self { store }
+    }
+
+    pub fn store(&self) -> &Arc<S> {
+      &self.store
+    }
+
+    /// Ensure a genesis block exists. Idempotent.
+    pub fn ensure_genesis(&self) -> Result<()> {
+      let height = self.store.tip_height()?;
+      // Height 0 can mean "empty" or "genesis at index 0". Check presence of block 0.
+      if height == 0 {
+        if self.store.get_block(0)?.is_none() {
+          let genesis = genesis_block();
+          self.store.put_block(&genesis)?;
+        }
+      }
+      Ok(())
+    }
+
+    /// Return (height, tip_hash). Height is 0 for empty or at genesis index 0.
+    pub fn tip(&self) -> Result<(u64, Option<Hash>)> {
+      Ok((self.store.tip_height()?, self.store.tip_hash()?))
+    }
+  }
+
+  /// A zero-transaction genesis block with zeroed prev-hash and merkle-root.
+  pub fn genesis_block() -> Block {
+    let header = BlockHeader::new(0, [0u8; 32], [0u8; 32], 0);
+    Block {
+      header,
+      txs: vec![],
+    }
+  }
+}
