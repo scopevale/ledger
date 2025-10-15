@@ -46,7 +46,12 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
     match cli.cmd {
-        Command::Submit { node, from, to, amount } => {
+        Command::Submit {
+            node,
+            from,
+            to,
+            amount,
+        } => {
             let tx = Tx { from, to, amount };
             let client = reqwest::Client::new();
             let res = client.post(format!("{node}/tx")).json(&tx).send().await?;

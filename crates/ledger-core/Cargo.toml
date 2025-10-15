@@ -1,6 +1,6 @@
 [package]
 name = "ledger-core"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
@@ -9,6 +9,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
+hex = "0.4.3"
 sha2 = { workspace = true }
 rand = { workspace = true }
 tracing = { workspace = true }
