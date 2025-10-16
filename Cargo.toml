@@ -10,8 +10,8 @@ members = [
 [workspace.package]
 edition = "2021"
 license = "MIT OR Apache-2.0"
-authors = ["LGR Capstone Project <example@example.com>"]
-rust-version = "1.70"
+authors = ["LGR Capstone Project - Gary Smith <scopevale@gmail.com>"]
+rust-version = "1.90"
 
 [workspace.dependencies]
 # core

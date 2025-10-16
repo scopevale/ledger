@@ -1,7 +1,7 @@
 use axum::{routing::{get, post}, Json, Router};
 use clap::Parser;
-use ledger_core::{Transaction};
-use ledger_storage::{sled_store::SledStore, Storage};
+use ledger_core::{Transaction, chain::Chain};
+use ledger_storage::sled_store::SledStore;
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
 use tower_http::trace::TraceLayer;
@@ -20,7 +20,7 @@ struct Args {
 
 #[derive(Clone)]
 struct AppState {
-    store: Arc<SledStore>,
+    chain: Chain<SledStore>,
 }
 
 #[derive(Serialize)]
@@ -45,16 +45,20 @@ async fn main() -> anyhow::Result<()> {
 
     let args = Args::parse();
     let store = Arc::new(SledStore::open(&args.data_dir)?);
-    let state = AppState { store };
+    let chain = Chain::new(store.clone());
+    chain.ensure_genesis()?;
+
+    let state = AppState { chain };
 
     let app = Router::new()
+        .route("/health", get(|| async { Json(Health { status: "ok" }) }))
         .route("/healthz", get(|| async { Json(Health { status: "ok" }) }))
         .route(
             "/chain/head",
             get({
                 let state = state.clone();
                 move || async move {
-                    let height = state.store.tip_height().unwrap_or(0);
+                    let (height, _hash) = state.chain.tip().unwrap_or((0, None));
                     Json(Head { height })
                 }
             }),
@@ -64,7 +68,7 @@ async fn main() -> anyhow::Result<()> {
             post({
                 let state = state.clone();
                 move |Json(tx): Json<TxIn>| {
-                    let state = state.clone();
+                    let _state = state.clone();
                     async move {
                         let tx = Transaction {
                             from: tx.from,
@@ -75,8 +79,6 @@ async fn main() -> anyhow::Result<()> {
                                 .unwrap()
                                 .as_secs(),
                         };
-                        // For iteration 1, we don't mine or append to chain; just acknowledge.
-                        let _ = state; // keep clippy happy for now
                         Json(serde_json::json!({ "accepted": true, "tx": tx }))
                     }
                 }
