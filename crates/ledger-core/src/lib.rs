@@ -12,6 +12,15 @@ pub struct Transaction {
     pub timestamp: u64,
 }
 
+impl PartialEq for Transaction {
+    fn eq(&self, other: &Self) -> bool {
+        self.from == other.from
+            && self.to == other.to
+            && self.amount == other.amount
+            && self.timestamp == other.timestamp
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BlockHeader {
     pub index: u64,
@@ -147,6 +156,7 @@ pub mod chain {
         fn get_block(&self, index: u64) -> Result<Option<Block>>;
         fn tip_height(&self) -> Result<u64>;
         fn tip_hash(&self) -> Result<Option<Hash>>;
+        fn close(&self) -> Result<()>;
     }
 
     /// Simple chain façade that delegates persistence to a `ChainStore`.
