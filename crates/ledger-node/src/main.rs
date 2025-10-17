@@ -58,6 +58,21 @@ struct MineParams {
     /// Leading zeros required in the hash, default is 20
     target: Option<u32>,
 }
+#[derive(Deserialize)]
+struct ListParams {
+    start: Option<u64>,
+    limit: Option<u32>,
+    dir: Option<String>,
+}
+
+#[derive(Serialize)]
+struct BlockRow {
+    index: u64,
+    ts: u64,
+    tx_count: usize,
+    hash: String,
+    previous_hash: String,
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -154,6 +169,41 @@ async fn main() -> anyhow::Result<()> {
                                 "error": e.to_string(),
                             })),
                         }
+                    }
+                }
+            }),
+        )
+        .route(
+            "/chain/blocks",
+            get({
+                let state = state.clone();
+                move |Query(p): Query<ListParams>| {
+                    let state = state.clone();
+                    async move {
+                        let (height, _) = state.chain.tip().unwrap_or((0, None));
+                        let limit = p.limit.unwrap_or(25).min(200);
+                        let desc = p.dir.as_deref() != Some("asc");
+                        let start = p.start.unwrap_or(height);
+
+                        // call through to storage impl
+                        let blocks = state
+                            .chain
+                            .store() // Arc<SledStore>
+                            .list_blocks_range(start, limit, desc)
+                            .unwrap_or_default();
+
+                        let rows: Vec<BlockRow> = blocks
+                            .into_iter()
+                            .map(|b| BlockRow {
+                                index: b.header.index,
+                                ts: b.header.timestamp,
+                                tx_count: b.txs.len(),
+                                hash: hex::encode(b.hash()),
+                                previous_hash: hex::encode(b.header.previous_hash),
+                            })
+                            .collect();
+
+                        Json(rows)
                     }
                 }
             }),
