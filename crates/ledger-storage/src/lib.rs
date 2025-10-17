@@ -9,4 +9,5 @@ pub trait Storage: Send + Sync {
     fn get_block(&self, index: u64) -> Result<Option<Block>>;
     fn tip_height(&self) -> Result<u64>;
     fn tip_hash(&self) -> Result<Option<Hash>>;
+    fn close(&self) -> Result<()>;
 }
