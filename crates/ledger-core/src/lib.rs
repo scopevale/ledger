@@ -14,10 +14,10 @@ pub struct Transaction {
 
 impl PartialEq for Transaction {
     fn eq(&self, other: &Self) -> bool {
-        self.from == other.from
-            && self.to == other.to
+        self.timestamp == other.timestamp
             && self.amount == other.amount
-            && self.timestamp == other.timestamp
+            && self.from == other.from
+            && self.to == other.to
     }
 }
 
@@ -203,6 +203,8 @@ pub mod chain {
 
 #[cfg(test)]
 mod tests {
+    use std::thread::sleep;
+
     use super::*;
     #[test]
     fn leading_zero_bits_examples() {
@@ -303,5 +305,395 @@ mod tests {
         let hash = block.hash();
         let expected_hex = "be8f84bd861af54eb5d6bd8d167c322e77f291d6cff94b3a859d3d75c53a925b";
         assert_eq!(hex::encode(hash), expected_hex);
+    }
+
+    #[test]
+    fn transaction_equality_example() {
+        let tx1 = Transaction {
+            from: "Alice".to_string(),
+            to: "Bob".to_string(),
+            amount: 10,
+            timestamp: 1_600_000_000,
+        };
+        let tx2 = Transaction {
+            from: "Alice".to_string(),
+            to: "Bob".to_string(),
+            amount: 10,
+            timestamp: 1_600_000_000,
+        };
+        let tx3 = Transaction {
+            from: "Alice".to_string(),
+            to: "Charlie".to_string(),
+            amount: 10,
+            timestamp: 1_600_000_000,
+        };
+        assert_eq!(tx1, tx2);
+        assert_ne!(tx1, tx3);
+    }
+
+    #[test]
+    fn block_header_hash_bytes_example() {
+        let header = BlockHeader::new(1, [0u8; 32], [1u8; 32], 42);
+        let bytes = header.hash_bytes();
+        assert_eq!(bytes.len(), 88);
+        assert_eq!(&bytes[0..8], &1u64.to_le_bytes());
+        assert_eq!(&bytes[8..40], &[0u8; 32]);
+        assert_eq!(&bytes[40..72], &[1u8; 32]);
+        assert_eq!(&bytes[72..80], &header.timestamp.to_le_bytes());
+        assert_eq!(&bytes[80..88], &42u64.to_le_bytes());
+    }
+
+    #[test]
+    fn block_header_new_example() {
+        let header = BlockHeader::new(1, [0u8; 32], [1u8; 32], 42);
+        assert_eq!(header.index, 1);
+        assert_eq!(header.previous_hash, [0u8; 32]);
+        assert_eq!(header.merkle_root, [1u8; 32]);
+        assert_eq!(header.nonce, 42);
+        assert!(header.timestamp > 0);
+    }
+
+    #[test]
+    fn transaction_serialization_example() {
+        let tx = Transaction {
+            from: "Alice".to_string(),
+            to: "Bob".to_string(),
+            amount: 10,
+            timestamp: 1_600_000_000,
+        };
+        let json = serde_json::to_string(&tx).unwrap();
+        let expected_json = r#"{"from":"Alice","to":"Bob","amount":10,"timestamp":1600000000}"#;
+        assert_eq!(json, expected_json);
+        let deserialized: Transaction = serde_json::from_str(&json).unwrap();
+        assert_eq!(tx, deserialized);
+    }
+
+    #[test]
+    fn block_serialization_example() {
+        let txs = vec![
+            Transaction {
+                from: "Alice".to_string(),
+                to: "Bob".to_string(),
+                amount: 10,
+                timestamp: 1_600_000_000,
+            },
+            Transaction {
+                from: "Bob".to_string(),
+                to: "Charlie".to_string(),
+                amount: 5,
+                timestamp: 1_600_000_100,
+            },
+        ];
+        let merkle = merkle_root(&txs);
+        let header = BlockHeader::new(1, [0u8; 32], merkle, 0);
+        let block = Block { header, txs };
+        let json = serde_json::to_string(&block).unwrap();
+        let deserialized: Block = serde_json::from_str(&json).unwrap();
+        assert_eq!(block.header.index, deserialized.header.index);
+        assert_eq!(
+            block.header.previous_hash,
+            deserialized.header.previous_hash
+        );
+        assert_eq!(block.header.merkle_root, deserialized.header.merkle_root);
+        assert_eq!(block.header.nonce, deserialized.header.nonce);
+        assert_eq!(block.txs, deserialized.txs);
+    }
+
+    #[test]
+    fn merkle_root_empty_txs() {
+        let txs: Vec<Transaction> = vec![];
+        let root = merkle_root(&txs);
+        assert_eq!(root, [0u8; 32]);
+    }
+
+    #[test]
+    fn merkle_root_single_tx() {
+        let txs = vec![Transaction {
+            from: "Alice".to_string(),
+            to: "Bob".to_string(),
+            amount: 10,
+            timestamp: 1_600_000_000,
+        }];
+        let root = merkle_root(&txs);
+        let mut hasher = Sha256::new();
+        hasher.update(serde_json::to_vec(&txs[0]).unwrap());
+        let digest = hasher.finalize();
+        let mut expected = [0u8; 32];
+        expected.copy_from_slice(&digest[..]);
+        assert_eq!(root, expected);
+    }
+
+    #[test]
+    fn merkle_root_two_txs() {
+        let txs = vec![
+            Transaction {
+                from: "Alice".to_string(),
+                to: "Bob".to_string(),
+                amount: 10,
+                timestamp: 1_600_000_000,
+            },
+            Transaction {
+                from: "Bob".to_string(),
+                to: "Charlie".to_string(),
+                amount: 5,
+                timestamp: 1_600_000_100,
+            },
+        ];
+        let root = merkle_root(&txs);
+        let mut hasher1 = Sha256::new();
+        hasher1.update(serde_json::to_vec(&txs[0]).unwrap());
+        let digest1 = hasher1.finalize();
+        let mut h1 = [0u8; 32];
+        h1.copy_from_slice(&digest1[..]);
+        let mut hasher2 = Sha256::new();
+        hasher2.update(serde_json::to_vec(&txs[1]).unwrap());
+        let digest2 = hasher2.finalize();
+        let mut h2 = [0u8; 32];
+        h2.copy_from_slice(&digest2[..]);
+        let mut hasher_root = Sha256::new();
+        hasher_root.update(h1);
+        hasher_root.update(h2);
+        let digest_root = hasher_root.finalize();
+        let mut expected = [0u8; 32];
+        expected.copy_from_slice(&digest_root[..]);
+        assert_eq!(root, expected);
+    }
+
+    #[test]
+    fn merkle_root_three_txs() {
+        let txs = vec![
+            Transaction {
+                from: "Alice".to_string(),
+                to: "Bob".to_string(),
+                amount: 10,
+                timestamp: 1_600_000_000,
+            },
+            Transaction {
+                from: "Bob".to_string(),
+                to: "Charlie".to_string(),
+                amount: 5,
+                timestamp: 1_600_000_100,
+            },
+            Transaction {
+                from: "Charlie".to_string(),
+                to: "Dave".to_string(),
+                amount: 2,
+                timestamp: 1_600_000_200,
+            },
+        ];
+        let root = merkle_root(&txs);
+        let expected_hex = "7f1f34ec53937fbf52547ea1bc9ed5f8d7103752dfdb67cb39698a72b28fa04a";
+        assert_eq!(hex::encode(root), expected_hex);
+    }
+
+    #[test]
+    fn merkle_root_one_thousand_txs() {
+        let mut txs = Vec::new();
+        for i in 0..1000 {
+            txs.push(Transaction {
+                from: format!("User{}", i),
+                to: format!("User{}", i + 1),
+                amount: i as u64,
+                timestamp: 1_600_000_000 + i as u64 * 100,
+            });
+        }
+        let root = merkle_root(&txs);
+        let expected_hex = "76953d5e2af4062dc5ab092d962f6a6da17f2bfe95c6d8e92b28b747e9253cf8";
+        assert_eq!(hex::encode(root), expected_hex);
+        // Just check that we get a non-zero root for a large number of transactions.
+        assert_ne!(root, [0u8; 32]);
+    }
+
+    #[test]
+    fn block_hash_consistency() {
+        let txs = vec![
+            Transaction {
+                from: "Alice".to_string(),
+                to: "Bob".to_string(),
+                amount: 10,
+                timestamp: 1_600_000_000,
+            },
+            Transaction {
+                from: "Bob".to_string(),
+                to: "Charlie".to_string(),
+                amount: 5,
+                timestamp: 1_600_000_100,
+            },
+        ];
+        let merkle = merkle_root(&txs);
+        let header = BlockHeader::new(1, [0u8; 32], merkle, 0);
+        let mut block = Block {
+            header: header,
+            txs,
+        };
+        block.header.timestamp = 1_600_000_200; // Fix timestamp for test consistency
+        let hash1 = block.hash();
+        let hash2 = block.hash();
+        assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn block_equality() {
+        // Two blocks with identical headers and transactions should have the same hash.
+        // ITRW, they are not `Eq` because timestamps would differ.
+        // Test passes because we only timestanp to nearest second, so they are equal here.
+        let txs1 = vec![
+            Transaction {
+                from: "Alice".to_string(),
+                to: "Bob".to_string(),
+                amount: 10,
+                timestamp: 1_600_000_000,
+            },
+            Transaction {
+                from: "Bob".to_string(),
+                to: "Charlie".to_string(),
+                amount: 5,
+                timestamp: 1_600_000_100,
+            },
+        ];
+        let merkle1 = merkle_root(&txs1);
+        let header1 = BlockHeader::new(1, [0u8; 32], merkle1, 0);
+        let block1 = Block {
+            header: header1,
+            txs: txs1.clone(),
+        };
+        let merkle2 = merkle_root(&txs1);
+        let header2 = BlockHeader::new(1, [0u8; 32], merkle2, 0);
+        let block2 = Block {
+            header: header2,
+            txs: txs1,
+        };
+        assert_eq!(block1.hash(), block2.hash());
+    }
+
+    #[test]
+    fn block_inequality() {
+        // Two blocks with identical headers and transactions should have the same hash.
+        // But if timestamps differ, hashes should differ.
+        let txs1 = vec![
+            Transaction {
+                from: "Alice".to_string(),
+                to: "Bob".to_string(),
+                amount: 10,
+                timestamp: 1_600_000_000,
+            },
+            Transaction {
+                from: "Bob".to_string(),
+                to: "Charlie".to_string(),
+                amount: 5,
+                timestamp: 1_600_000_100,
+            },
+        ];
+        let merkle1 = merkle_root(&txs1);
+        let header1 = BlockHeader::new(1, [0u8; 32], merkle1, 0);
+        let block1 = Block {
+            header: header1,
+            txs: txs1.clone(),
+        };
+        sleep(std::time::Duration::from_millis(1000)); // Ensure timestamp would differ
+        let merkle2 = merkle_root(&txs1);
+        let header2 = BlockHeader::new(1, [0u8; 32], merkle2, 0);
+        let block2 = Block {
+            header: header2,
+            txs: txs1,
+        };
+        assert_ne!(block1.hash(), block2.hash());
+    }
+
+    #[test]
+    fn transaction_inequality() {
+        let tx1 = Transaction {
+            from: "Alice".to_string(),
+            to: "Bob".to_string(),
+            amount: 10,
+            timestamp: 1_600_000_000,
+        };
+        let tx2 = Transaction {
+            from: "Alice".to_string(),
+            to: "Bob".to_string(),
+            amount: 10,
+            timestamp: 1_600_000_001,
+        };
+        assert_ne!(tx1, tx2);
+    }
+
+    #[test]
+    fn transaction_inequality_different_amount() {
+        let tx1 = Transaction {
+            from: "Alice".to_string(),
+            to: "Bob".to_string(),
+            amount: 10,
+            timestamp: 1_600_000_000,
+        };
+        let tx2 = Transaction {
+            from: "Alice".to_string(),
+            to: "Bob".to_string(),
+            amount: 20,
+            timestamp: 1_600_000_000,
+        };
+        assert_ne!(tx1, tx2);
+    }
+
+    #[test]
+    fn transaction_inequality_different_recipient() {
+        let tx1 = Transaction {
+            from: "Alice".to_string(),
+            to: "Bob".to_string(),
+            amount: 10,
+            timestamp: 1_600_000_000,
+        };
+        let tx2 = Transaction {
+            from: "Alice".to_string(),
+            to: "Charlie".to_string(),
+            amount: 10,
+            timestamp: 1_600_000_000,
+        };
+        assert_ne!(tx1, tx2);
+    }
+
+    #[test]
+    fn transaction_inequality_different_sender() {
+        let tx1 = Transaction {
+            from: "Alice".to_string(),
+            to: "Bob".to_string(),
+            amount: 10,
+            timestamp: 1_600_000_000,
+        };
+        let tx2 = Transaction {
+            from: "Eve".to_string(),
+            to: "Bob".to_string(),
+            amount: 10,
+            timestamp: 1_600_000_000,
+        };
+        assert_ne!(tx1, tx2);
+    }
+
+    #[test]
+    fn block_hash_changes_with_nonce() {
+        let txs = vec![
+            Transaction {
+                from: "Alice".to_string(),
+                to: "Bob".to_string(),
+                amount: 10,
+                timestamp: 1_600_000_000,
+            },
+            Transaction {
+                from: "Bob".to_string(),
+                to: "Charlie".to_string(),
+                amount: 5,
+                timestamp: 1_600_000_100,
+            },
+        ];
+        let merkle = merkle_root(&txs);
+        let header = BlockHeader::new(1, [0u8; 32], merkle, 0);
+        let mut block = Block {
+            header: header,
+            txs,
+        };
+        block.header.timestamp = 1_600_000_200; // Fix timestamp for test consistency
+        let hash1 = block.hash();
+        block.header.nonce += 1;
+        let hash2 = block.hash();
+        assert_ne!(hash1, hash2);
     }
 }
