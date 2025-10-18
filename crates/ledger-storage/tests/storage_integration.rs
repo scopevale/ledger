@@ -283,52 +283,6 @@ async fn test_storage_cleanup() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn test_storage_performance() -> anyhow::Result<()> {
-    use std::time::Instant;
-    // Create a temporary directory for the sled database
-    let temp_dir = tempdir()?;
-    let db_path = temp_dir.path().to_path_buf();
-    // Initialize the SledStore
-    let store = SledStore::open(db_path.to_str().unwrap())?;
-    // Measure performance of adding blocks
-    let num_blocks = 1000;
-    let start_time = Instant::now();
-    for i in 0..num_blocks {
-        let header = ledger_core::BlockHeader::new(
-            i as u64,
-            if i == 0 {
-                [0u8; 32]
-            } else {
-                store.get_block((i - 1) as u64).unwrap().unwrap().hash()
-            },
-            [0u8; 32],
-            0,
-        );
-        let block = Block {
-            header,
-            txs: vec![],
-        };
-        store.put_block(&block)?;
-    }
-    let duration = start_time.elapsed();
-    println!("Time taken to add {} blocks: {:?}", num_blocks, duration);
-    // Measure performance of retrieving blocks
-    let start_time = Instant::now();
-    for i in 0..num_blocks {
-        let _ = store.get_block(i as u64)?;
-    }
-    let duration = start_time.elapsed();
-    println!(
-        "Time taken to retrieve {} blocks: {:?}",
-        num_blocks, duration
-    );
-    // Cleanup
-    temp_dir.close()?;
-    let _ = fs::remove_dir_all(db_path);
-    Ok(())
-}
-
-#[tokio::test]
 async fn test_storage_large_blockchain() -> anyhow::Result<()> {
     // Create a temporary directory for the sled database
     let temp_dir = tempdir()?;

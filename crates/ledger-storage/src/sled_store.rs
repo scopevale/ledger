@@ -33,6 +33,31 @@ impl SledStore {
         self.db.flush()?;
         Ok(())
     }
+
+    pub fn list_blocks_range(
+        &self,
+        start: u64,
+        limit: u32,
+        desc: bool,
+    ) -> anyhow::Result<Vec<ledger_core::Block>> {
+        let tree = self.blocks();
+        let mut out = Vec::with_capacity(limit as usize);
+        if desc {
+            // iterate downwards from `start`
+            let start_key = start.to_be_bytes();
+            for kv in tree.range(..=start_key).rev().take(limit as usize) {
+                let (_, v) = kv?;
+                out.push(bincode::deserialize(&v)?);
+            }
+        } else {
+            let start_key = start.to_be_bytes();
+            for kv in tree.range(start_key..).take(limit as usize) {
+                let (_, v) = kv?;
+                out.push(bincode::deserialize(&v)?);
+            }
+        }
+        Ok(out)
+    }
 }
 
 impl Storage for SledStore {

@@ -146,7 +146,7 @@ pub mod pow {
 
 pub mod chain {
     use super::*;
-    use anyhow::Result;
+    use anyhow::{Context, Result};
     use std::sync::Arc;
 
     /// Trait the storage backends should implement for the chain to operate.
@@ -180,7 +180,12 @@ pub mod chain {
             // Height 0 can mean "empty" or "genesis at index 0". Check presence of block 0.
             if height == 0 && self.store.get_block(0)?.is_none() {
                 let genesis = genesis_block();
-                self.store.put_block(&genesis)?;
+                self.store.put_block(&genesis).with_context(|| {
+                    format!(
+                        "failed to persist genesis block at index {}",
+                        genesis.header.index
+                    )
+                })?;
             }
             Ok(())
         }
@@ -188,6 +193,20 @@ pub mod chain {
         /// Return (height, tip_hash). Height is 0 for empty or at genesis index 0.
         pub fn tip(&self) -> Result<(u64, Option<Hash>)> {
             Ok((self.store.tip_height()?, self.store.tip_hash()?))
+        }
+
+        /// Build, PoW-mine, and append a block with the provided transactions.
+        pub fn append_block(&self, txs: Vec<Transaction>, target_zeros: u32) -> Result<Block> {
+            let (height, tip_hash) = self.tip()?;
+            let next_index = height + 1; // genesis is index 0
+            let previous_hash = tip_hash.unwrap_or([0u8; 32]);
+            let header = BlockHeader::new(next_index, previous_hash, merkle_root(&txs), 0);
+            let block = Block { header, txs };
+            let mined = pow::mine_block(block, target_zeros);
+            self.store.put_block(&mined).with_context(|| {
+                format!("failed to persist block at index {}", mined.header.index)
+            })?;
+            Ok(mined)
         }
     }
 

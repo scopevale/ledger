@@ -1,9 +1,14 @@
-use axum::{routing::{get, post}, Json, Router};
+use axum::{
+    extract::Query,
+    routing::{get, post},
+    Json, Router,
+};
 use clap::Parser;
-use ledger_core::{Transaction, chain::Chain};
+use ledger_core::{chain::Chain, Transaction};
 use ledger_storage::sled_store::SledStore;
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
+use tokio::sync::Mutex;
 use tower_http::trace::TraceLayer;
 use tracing::{info, Level};
 
@@ -21,19 +26,52 @@ struct Args {
 #[derive(Clone)]
 struct AppState {
     chain: Chain<SledStore>,
+    // mempool: Arc<RwLock<Vec<Transaction>>>,
+    mempool: Arc<Mutex<Vec<Transaction>>>,
 }
 
 #[derive(Serialize)]
-struct Health { status: &'static str }
+struct Health {
+    status: &'static str,
+}
 
 #[derive(Serialize)]
-struct Head { height: u64 }
+struct Head {
+    height: u64,
+}
+
+#[derive(Serialize)]
+struct Tip {
+    height: u64,
+    hash: Option<String>,
+}
 
 #[derive(Deserialize)]
 struct TxIn {
     from: String,
     to: String,
     amount: u64,
+}
+
+#[derive(Deserialize)]
+struct MineParams {
+    /// Leading zeros required in the hash, default is 20
+    target: Option<u32>,
+}
+#[derive(Deserialize)]
+struct ListParams {
+    start: Option<u64>,
+    limit: Option<u32>,
+    dir: Option<String>,
+}
+
+#[derive(Serialize)]
+struct BlockRow {
+    index: u64,
+    ts: u64,
+    tx_count: usize,
+    hash: String,
+    previous_hash: String,
 }
 
 #[tokio::main]
@@ -48,7 +86,10 @@ async fn main() -> anyhow::Result<()> {
     let chain = Chain::new(store.clone());
     chain.ensure_genesis()?;
 
-    let state = AppState { chain };
+    let state = AppState {
+        chain,
+        mempool: Arc::new(Mutex::new(Vec::new())),
+    };
 
     let app = Router::new()
         .route("/health", get(|| async { Json(Health { status: "ok" }) }))
@@ -60,6 +101,19 @@ async fn main() -> anyhow::Result<()> {
                 move || async move {
                     let (height, _hash) = state.chain.tip().unwrap_or((0, None));
                     Json(Head { height })
+                }
+            }),
+        )
+        .route(
+            "/chain/tip",
+            get({
+                let state = state.clone();
+                move || async move {
+                    let (height, hash) = state.chain.tip().unwrap_or((0, None));
+                    Json(Tip {
+                        height,
+                        hash: hash.map(hex::encode),
+                    })
                 }
             }),
         )
@@ -79,7 +133,77 @@ async fn main() -> anyhow::Result<()> {
                                 .unwrap()
                                 .as_secs(),
                         };
-                        Json(serde_json::json!({ "accepted": true, "tx": tx }))
+                        state.mempool.lock().await.push(tx);
+                        Json(serde_json::json!({ "accepted": true}))
+                    }
+                }
+            }),
+        )
+        .route(
+            "/mine",
+            get({
+                let state = state.clone();
+                move |Query(params): Query<MineParams>| {
+                    let _state = state.clone();
+                    async move {
+                        let target_zeros = params.target.unwrap_or(20);
+                        let txs = {
+                            let mut mp = state.mempool.lock().await;
+                            if mp.is_empty() {
+                                Vec::new()
+                            } else {
+                                std::mem::take(&mut *mp)
+                            }
+                        };
+                        match state.chain.append_block(txs, target_zeros) {
+                            Ok(block) => Json(serde_json::json!({
+                                "mined": true,
+                                "height": block.header.index,
+                                "nonce": block.header.nonce,
+                                "hash": hex::encode(block.hash()),
+                                "tx_count": block.txs.len(),
+                                "target": target_zeros,
+                            })),
+                            Err(e) => Json(serde_json::json!({
+                                "mined": false,
+                                "error": e.to_string(),
+                            })),
+                        }
+                    }
+                }
+            }),
+        )
+        .route(
+            "/chain/blocks",
+            get({
+                let state = state.clone();
+                move |Query(p): Query<ListParams>| {
+                    let state = state.clone();
+                    async move {
+                        let (height, _) = state.chain.tip().unwrap_or((0, None));
+                        let limit = p.limit.unwrap_or(25).min(200);
+                        let desc = p.dir.as_deref() != Some("asc");
+                        let start = p.start.unwrap_or(height);
+
+                        // call through to storage impl
+                        let blocks = state
+                            .chain
+                            .store() // Arc<SledStore>
+                            .list_blocks_range(start, limit, desc)
+                            .unwrap_or_default();
+
+                        let rows: Vec<BlockRow> = blocks
+                            .into_iter()
+                            .map(|b| BlockRow {
+                                index: b.header.index,
+                                ts: b.header.timestamp,
+                                tx_count: b.txs.len(),
+                                hash: hex::encode(b.hash()),
+                                previous_hash: hex::encode(b.header.previous_hash),
+                            })
+                            .collect();
+
+                        Json(rows)
                     }
                 }
             }),
