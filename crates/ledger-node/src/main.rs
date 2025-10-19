@@ -57,6 +57,7 @@ struct TxIn {
 struct MineParams {
     /// Leading zeros required in the hash, default is 20
     target: Option<u32>,
+    data: Option<String>,
 }
 #[derive(Deserialize)]
 struct ListParams {
@@ -72,6 +73,7 @@ struct BlockRow {
     tx_count: usize,
     hash: String,
     previous_hash: String,
+    data: String,
 }
 
 #[tokio::main]
@@ -144,9 +146,10 @@ async fn main() -> anyhow::Result<()> {
             get({
                 let state = state.clone();
                 move |Query(params): Query<MineParams>| {
-                    let _state = state.clone();
+                    let mut state = state.clone();
                     async move {
                         let target_zeros = params.target.unwrap_or(20);
+                        let data = params.data.or(None);
                         let txs = {
                             let mut mp = state.mempool.lock().await;
                             if mp.is_empty() {
@@ -155,14 +158,22 @@ async fn main() -> anyhow::Result<()> {
                                 std::mem::take(&mut *mp)
                             }
                         };
-                        match state.chain.append_block(txs, target_zeros) {
-                            Ok(block) => Json(serde_json::json!({
+                        info!(
+                            "/mine endpoint called - mining a new block with {} txs",
+                            txs.len()
+                        );
+
+                        match state.chain.mine_with_txs_parallel(txs, data, target_zeros) {
+                            Ok((block, hash)) => Json(serde_json::json!({
                                 "mined": true,
                                 "height": block.header.index,
                                 "nonce": block.header.nonce,
-                                "hash": hex::encode(block.hash()),
+                                "hash": hex::encode(hash),
+                                "data_hash": hex::encode(block.header.data_hash),
+                                "merkle_root": hex::encode(block.header.merkle_root),
                                 "tx_count": block.txs.len(),
                                 "target": target_zeros,
+                                "data": block.data.clone().unwrap_or_else(|| "No Data".to_string()),
                             })),
                             Err(e) => Json(serde_json::json!({
                                 "mined": false,
@@ -200,6 +211,7 @@ async fn main() -> anyhow::Result<()> {
                                 tx_count: b.txs.len(),
                                 hash: hex::encode(b.hash()),
                                 previous_hash: hex::encode(b.header.previous_hash),
+                                data: b.data.clone().unwrap_or_else(|| "No Data".to_string()),
                             })
                             .collect();
 

@@ -8,8 +8,12 @@ This project adheres to Semantic Versioning and follows a simplified
 ### Added
 - **Chain façade** in `ledger-core` (`chain` module):
   - `ChainStore` trait (storage interface used by the chain).
-  - `Chain<S>` wrapper with `new()`, `ensure_genesis()`, and `tip() -> (height, tip_hash)`.
+  - `Chain<C>` wrapper with `new()`, `ensure_genesis()`, and `tip() -> (height, tip_hash)`.
   - `genesis_block()` helper.
+  - Add `mempool` with `/tx` ingestion and `/mine` endpoint to mine pending transactions
+  - Expose `/chain/tip` and `/chain/blocks` endpoints; add `SledStore::list_blocks_range`
+  - Add `Chain::append_block` with improved error context in `ensure_genesis`
+
 - **Genesis initialization**: `ledger-node` now constructs `Chain` and calls `ensure_genesis()` at startup.
 - **/health** endpoint in `ledger-node` (kept `/healthz` for convenience/back-compat).
 - **/chain/head** now reads height via `Chain::tip()` (reflects persisted state).
