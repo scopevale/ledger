@@ -73,6 +73,8 @@ struct BlockRow {
     tx_count: usize,
     hash: String,
     previous_hash: String,
+    merkle_root: String,
+    data_hash: String,
     data: String,
 }
 
@@ -169,8 +171,9 @@ async fn main() -> anyhow::Result<()> {
                                 "height": block.header.index,
                                 "nonce": block.header.nonce,
                                 "hash": hex::encode(hash),
-                                "data_hash": hex::encode(block.header.data_hash),
+                                "previous_hash": hex::encode(block.header.previous_hash),
                                 "merkle_root": hex::encode(block.header.merkle_root),
+                                "data_hash": hex::encode(block.header.data_hash),
                                 "tx_count": block.txs.len(),
                                 "target": target_zeros,
                                 "data": block.data.clone().unwrap_or_else(|| "No Data".to_string()),
@@ -211,6 +214,8 @@ async fn main() -> anyhow::Result<()> {
                                 tx_count: b.txs.len(),
                                 hash: hex::encode(b.hash()),
                                 previous_hash: hex::encode(b.header.previous_hash),
+                                merkle_root: hex::encode(b.header.merkle_root),
+                                data_hash: hex::encode(b.header.data_hash),
                                 data: b.data.clone().unwrap_or_else(|| "No Data".to_string()),
                             })
                             .collect();

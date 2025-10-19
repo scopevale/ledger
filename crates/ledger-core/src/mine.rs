@@ -36,7 +36,7 @@ pub fn mine_block_parallel(
         .find_any(|nonce| {
             let mut h = base_header;
             h.nonce = *nonce;
-            eprintln!("header.nonce = {:?} {:?}", h.nonce, *nonce);
+            eprintln!("header.nonce = {:?}", h.nonce);
             let hash = block_header_hash(h);
             count_leading_zero_bits(&hash) >= target
         })

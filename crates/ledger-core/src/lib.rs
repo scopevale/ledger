@@ -76,12 +76,7 @@ pub struct Block {
 
 impl Block {
     pub fn hash(&self) -> Hash {
-        let mut hasher = Sha256::new();
-        hasher.update(self.header.hash_bytes());
-        let digest = hasher.finalize();
-        let mut out = [0u8; 32];
-        out.copy_from_slice(&digest[..]);
-        out
+        block_header_hash(self.header)
     }
 }
 
@@ -95,6 +90,9 @@ pub fn block_header_hash(header: BlockHeader) -> Hash {
 }
 
 pub fn hash_block_data(data: &Option<String>) -> Hash {
+    if data.is_none() {
+        return [0u8; 32];
+    }
     let mut hasher = Sha256::new();
     if let Some(d) = data {
         hasher.update(d.as_bytes());
@@ -270,11 +268,13 @@ pub mod chain {
 
     /// A zero-transaction genesis block with zeroed prev-hash and merkle-root.
     pub fn genesis_block() -> Block {
-        let header = BlockHeader::new(0, [0u8; 32], [0u8; 32], [0u8; 32], 0);
+        let data = Some("Genesis Block".to_string());
+        let data_hash = hash_block_data(&data);
+        let header = BlockHeader::new(0, [0u8; 32], data_hash, [0u8; 32], 0);
         Block {
             header,
             txs: vec![],
-            data: Some("Genesis Block".to_string()),
+            data,
         }
     }
 }
