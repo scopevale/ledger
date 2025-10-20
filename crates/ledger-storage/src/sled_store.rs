@@ -139,6 +139,25 @@ impl ledger_core::chain::ChainStore for SledStore {
     }
 }
 
+// impl ChainStore for SledStore {
+//     fn put_block(&self, block: &Block) -> Result<()> {
+//         // delegate to your existing SledStore APIs
+//         self.put_block(block).map_err(Into::into)
+//     }
+//     fn get_block(&self, index: u64) -> Result<Option<Block>> {
+//         self.get_block(index).map_err(Into::into)
+//     }
+//     fn tip_height(&self) -> Result<u64> {
+//         self.tip_height().map_err(Into::into)
+//     }
+//     fn tip_hash(&self) -> Result<Option<Hash>> {
+//         self.tip_hash().map_err(Into::into)
+//     }
+//     fn close(&self) -> Result<()> {
+//         self.close().map_err(Into::into)
+//     }
+// }
+
 #[cfg(test)]
 mod tests {
     use super::*;

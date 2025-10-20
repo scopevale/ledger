@@ -1,9 +1,10 @@
 use crate::{
-    block_header_hash, hash_block_data, merkle_root, pow::count_leading_zero_bits, Block,
+    block_data_hash, block_header_hash, merkle_root, pow::count_leading_zero_bits, Block,
     BlockHeader, Transaction,
 };
 use rayon::prelude::*;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::info;
 
 /// Mines a block by searching nonces in parallel until a header hash has at least `target` leading zero bits.
 /// Returns the mined Block (with header.nonce set) and its hash.
@@ -21,7 +22,7 @@ pub fn mine_block_parallel(
         .as_secs();
 
     let merkle = merkle_root(&txs);
-    let data_hash = hash_block_data(&data);
+    let data_hash = block_data_hash(&data);
 
     // We’ll reuse this structure and mutate the nonce per attempt.
     let mut header = BlockHeader::new(index, prev_hash, data_hash, merkle, timestamp);
@@ -36,7 +37,6 @@ pub fn mine_block_parallel(
         .find_any(|nonce| {
             let mut h = base_header;
             h.nonce = *nonce;
-            eprintln!("header.nonce = {:?}", h.nonce);
             let hash = block_header_hash(h);
             count_leading_zero_bits(&hash) >= target
         })
@@ -46,6 +46,11 @@ pub fn mine_block_parallel(
     let mut final_header = base_header;
     final_header.nonce = found;
     let final_hash = block_header_hash(final_header);
+
+    info!(
+        "Mined block {} with nonce {} and hash {:x?}",
+        index, found, final_hash
+    );
 
     let block = Block {
         header: final_header,

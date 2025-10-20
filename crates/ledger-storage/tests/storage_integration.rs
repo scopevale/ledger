@@ -1,4 +1,4 @@
-use ledger_core::{hash_block_data, Block, Transaction};
+use ledger_core::{block_data_hash, Block, Transaction};
 use ledger_storage::sled_store::SledStore;
 use ledger_storage::Storage;
 use rand::Rng;
@@ -25,7 +25,7 @@ async fn test_storage_integration() -> anyhow::Result<()> {
             blocks[i - 1].hash()
         };
         let data = None;
-        let data_hash = hash_block_data(&data); // Placeholder, not used in this example
+        let data_hash = block_data_hash(&data); // Placeholder, not used in this example
         let merkle_root: [u8; 32] = rng.gen();
         let header =
             ledger_core::BlockHeader::new(i as u64, prev_hash, data_hash, merkle_root, rng.gen());

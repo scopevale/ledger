@@ -16,6 +16,5 @@ rand = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-rand = { workspace = true }
 tempfile = "3.3.0"
 tokio = { workspace = true }

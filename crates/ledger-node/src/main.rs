@@ -215,7 +215,11 @@ async fn main() -> anyhow::Result<()> {
                                 hash: hex::encode(b.hash()),
                                 previous_hash: hex::encode(b.header.previous_hash),
                                 merkle_root: hex::encode(b.header.merkle_root),
-                                data_hash: hex::encode(b.header.data_hash),
+                                data_hash: if b.data.is_some() {
+                                    hex::encode(b.header.data_hash)
+                                } else {
+                                    "0".repeat(64)
+                                },
                                 data: b.data.clone().unwrap_or_else(|| "No Data".to_string()),
                             })
                             .collect();

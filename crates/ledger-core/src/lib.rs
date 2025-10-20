@@ -7,6 +7,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub type Hash = [u8; 32];
 
+pub type Result<T> = anyhow::Result<T>;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Transaction {
     pub from: String,
@@ -89,10 +91,7 @@ pub fn block_header_hash(header: BlockHeader) -> Hash {
     out
 }
 
-pub fn hash_block_data(data: &Option<String>) -> Hash {
-    if data.is_none() {
-        return [0u8; 32];
-    }
+pub fn block_data_hash(data: &Option<String>) -> Hash {
     let mut hasher = Sha256::new();
     if let Some(d) = data {
         hasher.update(d.as_bytes());
@@ -144,9 +143,10 @@ pub mod pow {
     use super::{Block, Hash};
     use sha2::{Digest, Sha256};
 
-    /// Mine the block by incrementing nonce until the number of leading zero bits
+    /// Mine the genesis block by incrementing nonce until the number of leading zero bits
     /// in the block hash >= `target_zeros`.
-    pub fn mine_block(mut block: Block, target_zeros: u32) -> Block {
+    /// Use mine_genesis_block only for the genesis block; use chain::Chain::mine_with_txs_parallel for other blocks.
+    pub fn mine_genesis_block(mut block: Block, target_zeros: u32) -> Block {
         loop {
             let mut hasher = Sha256::new();
             hasher.update(block.header.hash_bytes());
@@ -176,6 +176,8 @@ pub mod pow {
 }
 
 pub mod chain {
+    use crate::{mine::mine_block_parallel, pow::mine_genesis_block};
+
     use super::*;
     use anyhow::{Context, Result};
     use std::sync::Arc;
@@ -211,10 +213,11 @@ pub mod chain {
             // Height 0 can mean "empty" or "genesis at index 0". Check presence of block 0.
             if height == 0 && self.store.get_block(0)?.is_none() {
                 let genesis = genesis_block();
-                self.store.put_block(&genesis).with_context(|| {
+                let genesis_block = mine_genesis_block(genesis, 20); // Mine genesis hash with 20 leading zero bits
+                self.store.put_block(&genesis_block).with_context(|| {
                     format!(
                         "failed to persist genesis block at index {}",
-                        genesis.header.index
+                        genesis_block.header.index
                     )
                 })?;
             }
@@ -226,22 +229,27 @@ pub mod chain {
             Ok((self.store.tip_height()?, self.store.tip_hash()?))
         }
 
-        /// Build, PoW-mine, and append a block with the provided transactions.
-        pub fn append_block(&self, txs: Vec<Transaction>, target_zeros: u32) -> Result<Block> {
-            let (height, tip_hash) = self.tip()?;
-            let data = None;
-            let data_hash = hash_block_data(&data); // Placeholder, not used in this example
-            let next_index = height + 1; // genesis is index 0
-            let previous_hash = tip_hash.unwrap_or([0u8; 32]);
-            let header =
-                BlockHeader::new(next_index, previous_hash, data_hash, merkle_root(&txs), 0);
-            let block = Block { header, data, txs };
-            let mined = pow::mine_block(block, target_zeros);
-            self.store.put_block(&mined).with_context(|| {
-                format!("failed to persist block at index {}", mined.header.index)
-            })?;
-            Ok(mined)
-        }
+        // /// Build, PoW-mine, and append a block with the provided transactions.
+        // /// deprecated: use mine_with_txs_parallel instead.
+        // pub fn append_block(&mut self, txs: Vec<Transaction>, target_zeros: u32) -> Result<Block> {
+        //     let (height, _) = self.tip()?;
+        //     let data = None;
+        //     // let data_hash = block_data_hash(&data); // Placeholder, not used in this example
+        //     let next_index = height + 1; // genesis is index 0
+        //
+        //     // let previous_hash = tip_hash.unwrap_or([0u8; 32]);
+        //     // let header =
+        //     // BlockHeader::new(next_index, previous_hash, data_hash, merkle_root(&txs), 0);
+        //     // let block = Block { header, data, txs };
+        //
+        //     let (mined, _) = self
+        //         .mine_with_txs_parallel(txs, data, target_zeros)
+        //         .with_context(|| format!("failed to mine block at index {}", next_index))?;
+        //     self.store.put_block(&mined).with_context(|| {
+        //         format!("failed to persist block at index {}", mined.header.index)
+        //     })?;
+        //     Ok(mined)
+        // }
 
         pub fn mine_with_txs_parallel(
             &mut self,
@@ -251,7 +259,7 @@ pub mod chain {
         ) -> anyhow::Result<(Block, [u8; 32])> {
             let index = self.store.tip_height()? + 1;
             let prev_hash = self.store.tip_hash()?;
-            let (block, hash) = mine::mine_block_parallel(
+            let (block, hash) = mine_block_parallel(
                 index,
                 prev_hash.expect("tip hash should be available"),
                 txs,
@@ -269,7 +277,7 @@ pub mod chain {
     /// A zero-transaction genesis block with zeroed prev-hash and merkle-root.
     pub fn genesis_block() -> Block {
         let data = Some("Genesis Block".to_string());
-        let data_hash = hash_block_data(&data);
+        let data_hash = block_data_hash(&data);
         let header = BlockHeader::new(0, [0u8; 32], data_hash, [0u8; 32], 0);
         Block {
             header,
@@ -280,10 +288,79 @@ pub mod chain {
 }
 
 #[cfg(test)]
+mod inmem_store_tests {
+    use super::*;
+    use crate::chain::{Chain, ChainStore};
+    use std::collections::BTreeMap;
+    use std::sync::{Arc, RwLock};
+
+    #[derive(Default)]
+    struct InMemStore {
+        blocks: RwLock<BTreeMap<u64, Block>>,
+        tip: RwLock<Option<Hash>>,
+    }
+
+    impl ChainStore for InMemStore {
+        fn put_block(&self, block: &Block) -> Result<()> {
+            self.blocks
+                .write()
+                .unwrap()
+                .insert(block.header.index, block.clone());
+            *self.tip.write().unwrap() = Some(block.hash());
+            Ok(())
+        }
+        fn get_block(&self, index: u64) -> Result<Option<Block>> {
+            Ok(self.blocks.read().unwrap().get(&index).cloned())
+        }
+        fn tip_height(&self) -> Result<u64> {
+            Ok(self
+                .blocks
+                .read()
+                .unwrap()
+                .keys()
+                .next_back()
+                .copied()
+                .unwrap_or(0))
+        }
+        fn tip_hash(&self) -> Result<Option<Hash>> {
+            Ok(*self.tip.read().unwrap())
+        }
+        fn close(&self) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn mine_block_example_inmem() {
+        let store = InMemStore::default();
+        let mut chain = Chain::new(Arc::new(store));
+        chain.ensure_genesis().unwrap();
+
+        let txs = vec![
+            Transaction {
+                from: "Alice".into(),
+                to: "Bob".into(),
+                amount: 10,
+                timestamp: 1_600_000_000,
+            },
+            Transaction {
+                from: "Bob".into(),
+                to: "Charlie".into(),
+                amount: 5,
+                timestamp: 1_600_000_100,
+            },
+        ];
+
+        let (_b, hash) = chain.mine_with_txs_parallel(txs, None, 16).unwrap();
+        assert!(pow::count_leading_zero_bits(&hash) >= 16);
+    }
+}
+
+#[cfg(test)]
 mod tests {
+    use super::*;
     use std::thread::sleep;
 
-    use super::*;
     #[test]
     fn leading_zero_bits_examples() {
         let mut h = [0u8; 32];
@@ -295,32 +372,6 @@ mod tests {
         assert_eq!(pow::count_leading_zero_bits(&h), 8);
         h[1] = 0x40; // 01000000
         assert_eq!(pow::count_leading_zero_bits(&h), 9);
-    }
-
-    #[test]
-    fn mine_block_example() {
-        let txs = vec![
-            Transaction {
-                from: "Alice".to_string(),
-                to: "Bob".to_string(),
-                amount: 10,
-                timestamp: 1_600_000_000,
-            },
-            Transaction {
-                from: "Bob".to_string(),
-                to: "Charlie".to_string(),
-                amount: 5,
-                timestamp: 1_600_000_100,
-            },
-        ];
-        let data = None;
-        let data_hash = hash_block_data(&data);
-        let merkle = merkle_root(&txs);
-        let header = BlockHeader::new(1, [0u8; 32], data_hash, merkle, 0);
-        let block = Block { header, txs, data };
-        let mined = pow::mine_block(block, 16); // Require at least 20 leading zero bits
-        let hash = mined.hash();
-        assert!(pow::count_leading_zero_bits(&hash) >= 16);
     }
 
     #[test]
@@ -376,7 +427,7 @@ mod tests {
             },
         ];
         let data = None;
-        let data_hash = hash_block_data(&data);
+        let data_hash = block_data_hash(&data);
         let merkle = merkle_root(&txs);
         let header = BlockHeader::new(1, [0u8; 32], data_hash, merkle, 0);
         let mut block = Block {
