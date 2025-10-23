@@ -1,6 +1,6 @@
 use crate::{
-    block_data_hash, block_header_hash, merkle_root, pow::count_leading_zero_bits, Block,
-    BlockHeader, Transaction,
+    block_data_hash, block_header_hash, constants::HASH_SIZE, merkle_root,
+    pow::count_leading_zero_bits, Block, BlockHeader, Transaction,
 };
 use rayon::prelude::*;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -10,11 +10,11 @@ use tracing::info;
 /// Returns the mined Block (with header.nonce set) and its hash.
 pub fn mine_block_parallel(
     index: u64,
-    prev_hash: [u8; 32],
+    prev_hash: [u8; HASH_SIZE],
     txs: Vec<Transaction>,
     data: Option<String>,
     target: u32,
-) -> (Block, [u8; 32]) {
+) -> (Block, [u8; HASH_SIZE]) {
     // Construct a header "template" (we'll vary only the nonce per attempt).
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -32,7 +32,7 @@ pub fn mine_block_parallel(
     let base_header = header;
 
     // Parallel search over the entire u64 range. Rayon will split this range across threads.
-    let found = (0u64..u64::MAX)
+    let found = (0u64..=u64::MAX)
         .into_par_iter()
         .find_any(|nonce| {
             let mut h = base_header;

@@ -1,5 +1,5 @@
 pub mod helpers;
-use ledger_core::{block_data_hash, Block, Transaction};
+use ledger_core::{block_data_hash, constants::HASH_SIZE, Block, Transaction};
 use ledger_storage::sled_store::SledStore;
 use ledger_storage::Storage;
 use rand::Rng;
@@ -18,13 +18,13 @@ async fn test_storage_integration() -> anyhow::Result<()> {
     // Generate and store blocks
     for i in 0..num_blocks {
         let prev_hash = if i == 0 {
-            [0u8; 32]
+            [0u8; HASH_SIZE]
         } else {
             blocks[i - 1].hash()
         };
         let data = None;
         let data_hash = block_data_hash(&data); // data_hash is used in BlockHeader, but its value is arbitrary for this test
-        let merkle_root: [u8; 32] = rng.gen();
+        let merkle_root: [u8; HASH_SIZE] = rng.gen();
         let header =
             ledger_core::BlockHeader::new(i as u64, prev_hash, data_hash, merkle_root, rng.gen());
         let block = Block {
@@ -42,7 +42,7 @@ async fn test_storage_integration() -> anyhow::Result<()> {
         assert_eq!(
             retrieved_block.header.previous_hash,
             if i == 0 {
-                [0u8; 32]
+                [0u8; HASH_SIZE]
             } else {
                 blocks[i - 1].hash()
             }
@@ -69,7 +69,13 @@ async fn test_storage_persistence() -> anyhow::Result<()> {
     // Initialize the SledStore and add a block
     {
         let store = SledStore::open(db_path.to_str().unwrap())?;
-        let header = ledger_core::BlockHeader::new(0, [0u8; 32], [0u8; 32], [0u8; 32], 0);
+        let header = ledger_core::BlockHeader::new(
+            0,
+            [0u8; HASH_SIZE],
+            [0u8; HASH_SIZE],
+            [0u8; HASH_SIZE],
+            0,
+        );
         let genesis_block = Block {
             header,
             txs: vec![],
@@ -82,8 +88,8 @@ async fn test_storage_persistence() -> anyhow::Result<()> {
         let store = SledStore::open(db_path.to_str().unwrap())?;
         let retrieved_block = store.get_block(0)?.expect("Genesis block should exist");
         assert_eq!(retrieved_block.header.index, 0);
-        assert_eq!(retrieved_block.header.previous_hash, [0u8; 32]);
-        assert_eq!(retrieved_block.header.merkle_root, [0u8; 32]);
+        assert_eq!(retrieved_block.header.previous_hash, [0u8; HASH_SIZE]);
+        assert_eq!(retrieved_block.header.merkle_root, [0u8; HASH_SIZE]);
         let tip_height = store.tip_height()?;
         let tip_hash = store.tip_hash()?.expect("Tip hash should exist");
         assert_eq!(tip_height, 0);
@@ -100,7 +106,8 @@ async fn test_storage_edge_cases() -> anyhow::Result<()> {
     // create a temporary sled database
     let (temp_dir, store) = create_temp_store();
     // Test empty block storage
-    let header = ledger_core::BlockHeader::new(0, [0u8; 32], [0u8; 32], [0u8; 32], 0);
+    let header =
+        ledger_core::BlockHeader::new(0, [0u8; HASH_SIZE], [0u8; HASH_SIZE], [0u8; HASH_SIZE], 0);
     let empty_block = Block {
         header,
         txs: vec![],
@@ -118,7 +125,8 @@ async fn test_storage_edge_cases() -> anyhow::Result<()> {
             timestamp: 1_600_000_000 + i as u64,
         })
         .collect();
-    let header = ledger_core::BlockHeader::new(1, empty_block.hash(), [0u8; 32], [0u8; 32], 0);
+    let header =
+        ledger_core::BlockHeader::new(1, empty_block.hash(), [0u8; HASH_SIZE], [0u8; HASH_SIZE], 0);
     let large_block = Block {
         header,
         txs: large_txs.clone(),
@@ -150,7 +158,7 @@ async fn test_storage_concurrency() -> anyhow::Result<()> {
             let header = ledger_core::BlockHeader::new(
                 i as u64,
                 if i == 0 {
-                    [0u8; 32]
+                    [0u8; HASH_SIZE]
                 } else {
                     store_clone
                         .get_block((i - 1) as u64)
@@ -158,8 +166,8 @@ async fn test_storage_concurrency() -> anyhow::Result<()> {
                         .unwrap()
                         .hash()
                 },
-                [0u8; 32],
-                [0u8; 32],
+                [0u8; HASH_SIZE],
+                [0u8; HASH_SIZE],
                 0,
             );
             let block = Block {
@@ -195,7 +203,13 @@ async fn test_storage_data_integrity() -> anyhow::Result<()> {
     // 1) Create DB and write a valid block
     {
         let store = SledStore::open(db_path.to_str().unwrap())?;
-        let header = ledger_core::BlockHeader::new(0, [0u8; 32], [1u8; 32], [2u8; 32], 0);
+        let header = ledger_core::BlockHeader::new(
+            0,
+            [0u8; HASH_SIZE],
+            [1u8; HASH_SIZE],
+            [2u8; HASH_SIZE],
+            0,
+        );
         block = Block {
             header,
             txs: vec![],
@@ -256,7 +270,8 @@ async fn test_storage_cleanup() -> anyhow::Result<()> {
     // create a temporary sled database
     let (temp_dir, store) = create_temp_store();
     // Add a block
-    let header = ledger_core::BlockHeader::new(0, [0u8; 32], [0u8; 32], [0u8; 32], 0);
+    let header =
+        ledger_core::BlockHeader::new(0, [0u8; HASH_SIZE], [0u8; HASH_SIZE], [0u8; HASH_SIZE], 0);
     let block = Block {
         header,
         txs: vec![],
@@ -282,12 +297,12 @@ async fn test_storage_large_blockchain() -> anyhow::Result<()> {
     // Generate and store blocks
     for i in 0..num_blocks {
         let prev_hash = if i == 0 {
-            [0u8; 32]
+            [0u8; HASH_SIZE]
         } else {
             blocks[i - 1].hash()
         };
-        let data_hash: [u8; 32] = rng.gen();
-        let merkle_root: [u8; 32] = rng.gen();
+        let data_hash: [u8; HASH_SIZE] = rng.gen();
+        let merkle_root: [u8; HASH_SIZE] = rng.gen();
         let header =
             ledger_core::BlockHeader::new(i as u64, prev_hash, data_hash, merkle_root, rng.gen());
         let block = Block {
@@ -305,7 +320,7 @@ async fn test_storage_large_blockchain() -> anyhow::Result<()> {
         assert_eq!(
             retrieved_block.header.previous_hash,
             if i == 0 {
-                [0u8; 32]
+                [0u8; HASH_SIZE]
             } else {
                 blocks[i - 1].hash()
             }
@@ -368,7 +383,13 @@ async fn test_storage_repeated_open_close() -> anyhow::Result<()> {
     for _ in 0..10 {
         {
             let store = SledStore::open(db_path.to_str().unwrap())?;
-            let header = ledger_core::BlockHeader::new(0, [0u8; 32], [0u8; 32], [0u8; 32], 0);
+            let header = ledger_core::BlockHeader::new(
+                0,
+                [0u8; HASH_SIZE],
+                [0u8; HASH_SIZE],
+                [0u8; HASH_SIZE],
+                0,
+            );
             let block = Block {
                 header,
                 txs: vec![],
@@ -400,7 +421,8 @@ async fn test_storage_large_transactions() -> anyhow::Result<()> {
             timestamp: 1_600_000_000 + i as u64,
         })
         .collect();
-    let header = ledger_core::BlockHeader::new(0, [0u8; 32], [0u8; 32], [0u8; 32], 0);
+    let header =
+        ledger_core::BlockHeader::new(0, [0u8; HASH_SIZE], [0u8; HASH_SIZE], [0u8; HASH_SIZE], 0);
     let block = Block {
         header,
         txs: large_txs.clone(),
@@ -421,9 +443,15 @@ async fn test_storage_multiple_tips() -> anyhow::Result<()> {
     // create a temporary sled database
     let (temp_dir, store) = create_temp_store();
     // Add multiple blocks
-    let mut prev_hash = [0u8; 32];
+    let mut prev_hash = [0u8; HASH_SIZE];
     for i in 0..5 {
-        let header = ledger_core::BlockHeader::new(i as u64, prev_hash, [0u8; 32], [0u8; 32], 0);
+        let header = ledger_core::BlockHeader::new(
+            i as u64,
+            prev_hash,
+            [0u8; HASH_SIZE],
+            [0u8; HASH_SIZE],
+            0,
+        );
         let block = Block {
             header,
             txs: vec![],
@@ -460,7 +488,7 @@ async fn test_storage_stress() -> anyhow::Result<()> {
             let header = ledger_core::BlockHeader::new(
                 i as u64,
                 if i == 0 {
-                    [0u8; 32]
+                    [0u8; HASH_SIZE]
                 } else {
                     store_clone
                         .get_block((i - 1) as u64)
@@ -468,8 +496,8 @@ async fn test_storage_stress() -> anyhow::Result<()> {
                         .unwrap()
                         .hash()
                 },
-                [0u8; 32],
-                [0u8; 32],
+                [0u8; HASH_SIZE],
+                [0u8; HASH_SIZE],
                 0,
             );
             let block = Block {
@@ -503,9 +531,15 @@ async fn test_storage_reindex() -> anyhow::Result<()> {
     // Initialize the SledStore
     let store = SledStore::open(db_path.to_str().unwrap())?;
     // Add blocks
-    let mut prev_hash = [0u8; 32];
+    let mut prev_hash = [0u8; HASH_SIZE];
     for i in 0..5 {
-        let header = ledger_core::BlockHeader::new(i as u64, prev_hash, [0u8; 32], [0u8; 32], 0);
+        let header = ledger_core::BlockHeader::new(
+            i as u64,
+            prev_hash,
+            [0u8; HASH_SIZE],
+            [0u8; HASH_SIZE],
+            0,
+        );
         let block = Block {
             header,
             txs: vec![],

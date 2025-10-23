@@ -1,5 +1,3 @@
-pub mod constants;
-
 use axum::{
     extract::Query,
     routing::{get, post},
@@ -14,7 +12,7 @@ use tokio::sync::Mutex;
 use tower_http::trace::TraceLayer;
 use tracing::{info, Level};
 
-use crate::constants::{BLOCKS_PER_BATCH, HASH_HEX_SIZE, MAX_BLOCKS_PER_REQUEST};
+use ledger_core::constants::{BLOCKS_PER_BATCH, HASH_HEX_SIZE, MAX_BLOCKS_PER_REQUEST};
 
 #[derive(Parser, Debug)]
 struct Args {

@@ -1,5 +1,6 @@
 use crate::Storage;
 use anyhow::{Ok, Result};
+use ledger_core::constants::HASH_SIZE;
 use ledger_core::{Block, Hash};
 use sled::{Db, IVec};
 use std::path::Path;
@@ -107,7 +108,7 @@ impl Storage for SledStore {
 
     fn tip_hash(&self) -> Result<Option<Hash>> {
         Ok(self.db.get(KEY_TIP_HASH)?.map(|v| {
-            let mut arr = [0u8; 32];
+            let mut arr = [0u8; HASH_SIZE];
             arr.copy_from_slice(&v);
             arr
         }))
@@ -139,7 +140,6 @@ impl ledger_core::chain::ChainStore for SledStore {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -164,9 +164,9 @@ mod tests {
         let block = Block {
             header: ledger_core::BlockHeader {
                 index: 1,
-                previous_hash: [0u8; 32],
-                data_hash: [0u8; 32],
-                merkle_root: [0u8; 32],
+                previous_hash: [0u8; HASH_SIZE],
+                data_hash: [0u8; HASH_SIZE],
+                merkle_root: [0u8; HASH_SIZE],
                 timestamp: 0,
                 nonce: 0,
             },
@@ -206,13 +206,13 @@ mod tests {
         let chain = ledger_core::chain::Chain::new(std::sync::Arc::new(store.clone()));
         chain.ensure_genesis().unwrap();
         for i in 1..=5 {
-            let prev_hash = store.tip_hash().unwrap().unwrap_or([0u8; 32]);
+            let prev_hash = store.tip_hash().unwrap().unwrap_or([0u8; HASH_SIZE]);
             let block = Block {
                 header: ledger_core::BlockHeader {
                     index: i,
                     previous_hash: prev_hash,
-                    data_hash: [0u8; 32],
-                    merkle_root: [0u8; 32],
+                    data_hash: [0u8; HASH_SIZE],
+                    merkle_root: [0u8; HASH_SIZE],
                     timestamp: 0,
                     nonce: 0,
                 },
@@ -240,9 +240,9 @@ mod tests {
             let block = Block {
                 header: ledger_core::BlockHeader {
                     index: 1,
-                    previous_hash: [0u8; 32],
-                    data_hash: [0u8; 32],
-                    merkle_root: [0u8; 32],
+                    previous_hash: [0u8; HASH_SIZE],
+                    data_hash: [0u8; HASH_SIZE],
+                    merkle_root: [0u8; HASH_SIZE],
                     timestamp: 0,
                     nonce: 0,
                 },
@@ -285,9 +285,9 @@ mod tests {
                 let block = Block {
                     header: ledger_core::BlockHeader {
                         index: i,
-                        previous_hash: [0u8; 32],
-                        data_hash: [0u8; 32],
-                        merkle_root: [0u8; 32],
+                        previous_hash: [0u8; HASH_SIZE],
+                        data_hash: [0u8; HASH_SIZE],
+                        merkle_root: [0u8; HASH_SIZE],
                         timestamp: 0,
                         nonce: 0,
                     },
@@ -315,13 +315,13 @@ mod tests {
         let store = SledStore::open(temp_dir.path()).unwrap();
         let num_blocks = 1000;
         for i in 0..num_blocks {
-            let prev_hash = store.tip_hash().unwrap().unwrap_or([0u8; 32]);
+            let prev_hash = store.tip_hash().unwrap().unwrap_or([0u8; HASH_SIZE]);
             let block = Block {
                 header: ledger_core::BlockHeader {
                     index: i,
                     previous_hash: prev_hash,
-                    data_hash: [0u8; 32],
-                    merkle_root: [0u8; 32],
+                    data_hash: [0u8; HASH_SIZE],
+                    merkle_root: [0u8; HASH_SIZE],
                     timestamp: 0,
                     nonce: 0,
                 },
@@ -346,9 +346,9 @@ mod tests {
         let block = Block {
             header: ledger_core::BlockHeader {
                 index: 1,
-                previous_hash: [0u8; 32],
-                data_hash: [0u8; 32],
-                merkle_root: [0u8; 32],
+                previous_hash: [0u8; HASH_SIZE],
+                data_hash: [0u8; HASH_SIZE],
+                merkle_root: [0u8; HASH_SIZE],
                 timestamp: 0,
                 nonce: 0,
             },
@@ -375,9 +375,9 @@ mod tests {
         let block = Block {
             header: ledger_core::BlockHeader {
                 index: 1,
-                previous_hash: [0u8; 32],
-                data_hash: [0u8; 32],
-                merkle_root: [0u8; 32],
+                previous_hash: [0u8; HASH_SIZE],
+                data_hash: [0u8; HASH_SIZE],
+                merkle_root: [0u8; HASH_SIZE],
                 timestamp: 0,
                 nonce: 0,
             },
@@ -415,8 +415,8 @@ mod tests {
         let block = Block {
             header: ledger_core::BlockHeader {
                 index: 1,
-                previous_hash: [0u8; 32],
-                data_hash: [0u8; 32],
+                previous_hash: [0u8; HASH_SIZE],
+                data_hash: [0u8; HASH_SIZE],
                 merkle_root: ledger_core::merkle_root(&[tx1.clone(), tx2.clone()]),
                 timestamp: 0,
                 nonce: 0,
@@ -443,9 +443,9 @@ mod tests {
         let block1 = Block {
             header: ledger_core::BlockHeader {
                 index: 1,
-                previous_hash: [0u8; 32],
-                data_hash: [0u8; 32],
-                merkle_root: [0u8; 32],
+                previous_hash: [0u8; HASH_SIZE],
+                data_hash: [0u8; HASH_SIZE],
+                merkle_root: [0u8; HASH_SIZE],
                 timestamp: 0,
                 nonce: 0,
             },
@@ -455,9 +455,9 @@ mod tests {
         let block3 = Block {
             header: ledger_core::BlockHeader {
                 index: 3,
-                data_hash: [0u8; 32],
-                previous_hash: [0u8; 32],
-                merkle_root: [0u8; 32],
+                data_hash: [0u8; HASH_SIZE],
+                previous_hash: [0u8; HASH_SIZE],
+                merkle_root: [0u8; HASH_SIZE],
                 timestamp: 0,
                 nonce: 0,
             },
@@ -493,8 +493,8 @@ mod tests {
         let block = Block {
             header: ledger_core::BlockHeader {
                 index: 1,
-                previous_hash: [0u8; 32],
-                data_hash: [0u8; 32],
+                previous_hash: [0u8; HASH_SIZE],
+                data_hash: [0u8; HASH_SIZE],
                 merkle_root: ledger_core::merkle_root(&txs),
                 timestamp: 0,
                 nonce: 0,
@@ -521,9 +521,9 @@ mod tests {
         let block1 = Block {
             header: ledger_core::BlockHeader {
                 index: 1,
-                previous_hash: [0u8; 32],
-                data_hash: [0u8; 32],
-                merkle_root: [0u8; 32],
+                previous_hash: [0u8; HASH_SIZE],
+                data_hash: [0u8; HASH_SIZE],
+                merkle_root: [0u8; HASH_SIZE],
                 timestamp: 0,
                 nonce: 0,
             },
@@ -533,9 +533,9 @@ mod tests {
         let block2 = Block {
             header: ledger_core::BlockHeader {
                 index: 1, // same index as block1
-                previous_hash: [1u8; 32],
-                data_hash: [0u8; 32],
-                merkle_root: [1u8; 32],
+                previous_hash: [1u8; HASH_SIZE],
+                data_hash: [0u8; HASH_SIZE],
+                merkle_root: [1u8; HASH_SIZE],
                 timestamp: 0,
                 nonce: 0,
             },
@@ -560,9 +560,9 @@ mod tests {
         let block1 = Block {
             header: ledger_core::BlockHeader {
                 index: u64::MAX - 1,
-                previous_hash: [0u8; 32],
-                data_hash: [0u8; 32],
-                merkle_root: [0u8; 32],
+                previous_hash: [0u8; HASH_SIZE],
+                data_hash: [0u8; HASH_SIZE],
+                merkle_root: [0u8; HASH_SIZE],
                 timestamp: 0,
                 nonce: 0,
             },
@@ -573,8 +573,8 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: u64::MAX,
                 previous_hash: block1.hash(),
-                data_hash: [0u8; 32],
-                merkle_root: [1u8; 32],
+                data_hash: [0u8; HASH_SIZE],
+                merkle_root: [1u8; HASH_SIZE],
                 timestamp: 0,
                 nonce: 0,
             },
@@ -611,8 +611,8 @@ mod tests {
         let block = Block {
             header: ledger_core::BlockHeader {
                 index: 1,
-                previous_hash: [0u8; 32],
-                data_hash: [0u8; 32],
+                previous_hash: [0u8; HASH_SIZE],
+                data_hash: [0u8; HASH_SIZE],
                 merkle_root: ledger_core::merkle_root(&[tx1.clone(), tx2.clone()]),
                 timestamp: 0,
                 nonce: 0,
@@ -638,9 +638,9 @@ mod tests {
         let block = Block {
             header: ledger_core::BlockHeader {
                 index: 1,
-                previous_hash: [0u8; 32],
-                data_hash: [0u8; 32],
-                merkle_root: [0u8; 32], // merkle root of empty txs
+                previous_hash: [0u8; HASH_SIZE],
+                data_hash: [0u8; HASH_SIZE],
+                merkle_root: [0u8; HASH_SIZE], // merkle root of empty txs
                 timestamp: 0,
                 nonce: 0,
             },
@@ -674,8 +674,8 @@ mod tests {
         let block = Block {
             header: ledger_core::BlockHeader {
                 index: 1,
-                previous_hash: [0u8; 32],
-                data_hash: [0u8; 32],
+                previous_hash: [0u8; HASH_SIZE],
+                data_hash: [0u8; HASH_SIZE],
                 merkle_root: ledger_core::merkle_root(&txs),
                 timestamp: 0,
                 nonce: 0,
@@ -708,8 +708,8 @@ mod tests {
         let block = Block {
             header: ledger_core::BlockHeader {
                 index: 1,
-                previous_hash: [0u8; 32],
-                data_hash: [0u8; 32],
+                previous_hash: [0u8; HASH_SIZE],
+                data_hash: [0u8; HASH_SIZE],
                 merkle_root: ledger_core::merkle_root(&[tx.clone(), tx.clone()]),
                 timestamp: 0,
                 nonce: 0,
@@ -735,9 +735,9 @@ mod tests {
         let block1 = Block {
             header: ledger_core::BlockHeader {
                 index: u64::MAX - 10,
-                previous_hash: [0u8; 32],
-                data_hash: [0u8; 32],
-                merkle_root: [0u8; 32],
+                previous_hash: [0u8; HASH_SIZE],
+                data_hash: [0u8; HASH_SIZE],
+                merkle_root: [0u8; HASH_SIZE],
                 timestamp: 0,
                 nonce: 0,
             },
@@ -748,8 +748,8 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: u64::MAX - 5,
                 previous_hash: block1.hash(),
-                data_hash: [0u8; 32],
-                merkle_root: [1u8; 32],
+                data_hash: [0u8; HASH_SIZE],
+                merkle_root: [1u8; HASH_SIZE],
                 timestamp: 0,
                 nonce: 0,
             },
@@ -760,8 +760,8 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: u64::MAX,
                 previous_hash: block2.hash(),
-                data_hash: [0u8; 32],
-                merkle_root: [2u8; 32],
+                data_hash: [0u8; HASH_SIZE],
+                merkle_root: [2u8; HASH_SIZE],
                 timestamp: 0,
                 nonce: 0,
             },
@@ -789,9 +789,9 @@ mod tests {
         let block0 = Block {
             header: ledger_core::BlockHeader {
                 index: 0,
-                previous_hash: [0u8; 32],
-                data_hash: [0u8; 32],
-                merkle_root: [0u8; 32],
+                previous_hash: [0u8; HASH_SIZE],
+                data_hash: [0u8; HASH_SIZE],
+                merkle_root: [0u8; HASH_SIZE],
                 timestamp: 0,
                 nonce: 0,
             },
@@ -802,8 +802,8 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: 1,
                 previous_hash: block0.hash(),
-                data_hash: [0u8; 32],
-                merkle_root: [1u8; 32],
+                data_hash: [0u8; HASH_SIZE],
+                merkle_root: [1u8; HASH_SIZE],
                 timestamp: 0,
                 nonce: 0,
             },
@@ -838,8 +838,8 @@ mod tests {
         let block = Block {
             header: ledger_core::BlockHeader {
                 index: 1,
-                previous_hash: [0u8; 32],
-                data_hash: [0u8; 32],
+                previous_hash: [0u8; HASH_SIZE],
+                data_hash: [0u8; HASH_SIZE],
                 merkle_root: ledger_core::merkle_root(&txs),
                 timestamp: 0,
                 nonce: 0,
@@ -877,8 +877,8 @@ mod tests {
         let block = Block {
             header: ledger_core::BlockHeader {
                 index: 1,
-                previous_hash: [0u8; 32],
-                data_hash: [0u8; 32],
+                previous_hash: [0u8; HASH_SIZE],
+                data_hash: [0u8; HASH_SIZE],
                 merkle_root,
                 timestamp: 0,
                 nonce: 0,
@@ -908,9 +908,9 @@ mod tests {
         let block1 = Block {
             header: ledger_core::BlockHeader {
                 index: 1,
-                previous_hash: [0u8; 32],
-                data_hash: [0u8; 32],
-                merkle_root: [0u8; 32],
+                previous_hash: [0u8; HASH_SIZE],
+                data_hash: [0u8; HASH_SIZE],
+                merkle_root: [0u8; HASH_SIZE],
                 timestamp: 0,
                 nonce: 0,
             },
@@ -924,8 +924,8 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: 2,
                 previous_hash: block1.hash(),
-                data_hash: [0u8; 32],
-                merkle_root: [1u8; 32],
+                data_hash: [0u8; HASH_SIZE],
+                merkle_root: [1u8; HASH_SIZE],
                 timestamp: 0,
                 nonce: 0,
             },
