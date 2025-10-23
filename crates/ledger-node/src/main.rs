@@ -1,3 +1,5 @@
+pub mod constants;
+
 use axum::{
     extract::Query,
     routing::{get, post},
@@ -11,6 +13,8 @@ use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::Mutex;
 use tower_http::trace::TraceLayer;
 use tracing::{info, Level};
+
+use crate::constants::{BLOCKS_PER_BATCH, HASH_HEX_SIZE, MAX_BLOCKS_PER_REQUEST};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -57,6 +61,7 @@ struct TxIn {
 struct MineParams {
     /// Leading zeros required in the hash, default is 20
     target: Option<u32>,
+    data: Option<String>,
 }
 #[derive(Deserialize)]
 struct ListParams {
@@ -72,6 +77,9 @@ struct BlockRow {
     tx_count: usize,
     hash: String,
     previous_hash: String,
+    merkle_root: String,
+    data_hash: String,
+    data: String,
 }
 
 #[tokio::main]
@@ -144,9 +152,10 @@ async fn main() -> anyhow::Result<()> {
             get({
                 let state = state.clone();
                 move |Query(params): Query<MineParams>| {
-                    let _state = state.clone();
+                    let mut state = state.clone();
                     async move {
                         let target_zeros = params.target.unwrap_or(20);
+                        let data = params.data;
                         let txs = {
                             let mut mp = state.mempool.lock().await;
                             if mp.is_empty() {
@@ -155,14 +164,23 @@ async fn main() -> anyhow::Result<()> {
                                 std::mem::take(&mut *mp)
                             }
                         };
-                        match state.chain.append_block(txs, target_zeros) {
-                            Ok(block) => Json(serde_json::json!({
+                        info!(
+                            "/mine endpoint called - mining a new block with {} txs",
+                            txs.len()
+                        );
+
+                        match state.chain.mine_with_txs_parallel(txs, data, target_zeros) {
+                            Ok((block, hash)) => Json(serde_json::json!({
                                 "mined": true,
                                 "height": block.header.index,
                                 "nonce": block.header.nonce,
-                                "hash": hex::encode(block.hash()),
+                                "hash": hex::encode(hash),
+                                "previous_hash": hex::encode(block.header.previous_hash),
+                                "merkle_root": hex::encode(block.header.merkle_root),
+                                "data_hash": hex::encode(block.header.data_hash),
                                 "tx_count": block.txs.len(),
                                 "target": target_zeros,
+                                "data": block.data.clone().unwrap_or_else(|| "No Data".to_string()),
                             })),
                             Err(e) => Json(serde_json::json!({
                                 "mined": false,
@@ -181,7 +199,10 @@ async fn main() -> anyhow::Result<()> {
                     let state = state.clone();
                     async move {
                         let (height, _) = state.chain.tip().unwrap_or((0, None));
-                        let limit = p.limit.unwrap_or(25).min(200);
+                        let limit = p
+                            .limit
+                            .unwrap_or(BLOCKS_PER_BATCH)
+                            .min(MAX_BLOCKS_PER_REQUEST);
                         let desc = p.dir.as_deref() != Some("asc");
                         let start = p.start.unwrap_or(height);
 
@@ -200,6 +221,13 @@ async fn main() -> anyhow::Result<()> {
                                 tx_count: b.txs.len(),
                                 hash: hex::encode(b.hash()),
                                 previous_hash: hex::encode(b.header.previous_hash),
+                                merkle_root: hex::encode(b.header.merkle_root),
+                                data_hash: if b.data.is_some() {
+                                    hex::encode(b.header.data_hash)
+                                } else {
+                                    "0".repeat(HASH_HEX_SIZE)
+                                },
+                                data: b.data.clone().unwrap_or_else(|| "No Data".to_string()),
                             })
                             .collect();
 

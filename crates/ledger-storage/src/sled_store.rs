@@ -139,6 +139,7 @@ impl ledger_core::chain::ChainStore for SledStore {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -164,11 +165,13 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: 1,
                 previous_hash: [0u8; 32],
+                data_hash: [0u8; 32],
                 merkle_root: [0u8; 32],
                 timestamp: 0,
                 nonce: 0,
             },
             txs: vec![],
+            data: None,
         };
         store.put_block(&block).unwrap();
         assert_eq!(store.tip_height().unwrap(), 1);
@@ -208,11 +211,13 @@ mod tests {
                 header: ledger_core::BlockHeader {
                     index: i,
                     previous_hash: prev_hash,
+                    data_hash: [0u8; 32],
                     merkle_root: [0u8; 32],
                     timestamp: 0,
                     nonce: 0,
                 },
                 txs: vec![],
+                data: None,
             };
             store.put_block(&block).unwrap();
             assert_eq!(store.tip_height().unwrap(), i);
@@ -236,11 +241,13 @@ mod tests {
                 header: ledger_core::BlockHeader {
                     index: 1,
                     previous_hash: [0u8; 32],
+                    data_hash: [0u8; 32],
                     merkle_root: [0u8; 32],
                     timestamp: 0,
                     nonce: 0,
                 },
                 txs: vec![],
+                data: None,
             };
             store.put_block(&block).unwrap();
             assert_eq!(store.tip_height().unwrap(), 1);
@@ -279,11 +286,13 @@ mod tests {
                     header: ledger_core::BlockHeader {
                         index: i,
                         previous_hash: [0u8; 32],
+                        data_hash: [0u8; 32],
                         merkle_root: [0u8; 32],
                         timestamp: 0,
                         nonce: 0,
                     },
                     txs: vec![],
+                    data: None,
                 };
                 store.put_block(&block).unwrap();
             });
@@ -311,11 +320,13 @@ mod tests {
                 header: ledger_core::BlockHeader {
                     index: i,
                     previous_hash: prev_hash,
+                    data_hash: [0u8; 32],
                     merkle_root: [0u8; 32],
                     timestamp: 0,
                     nonce: 0,
                 },
                 txs: vec![],
+                data: None,
             };
             store.put_block(&block).unwrap();
             assert_eq!(store.tip_height().unwrap(), i);
@@ -336,11 +347,13 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: 1,
                 previous_hash: [0u8; 32],
+                data_hash: [0u8; 32],
                 merkle_root: [0u8; 32],
                 timestamp: 0,
                 nonce: 0,
             },
             txs: vec![],
+            data: None,
         };
         store.put_block(&block).unwrap();
         assert_eq!(store.tip_height().unwrap(), 1);
@@ -363,11 +376,13 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: 1,
                 previous_hash: [0u8; 32],
+                data_hash: [0u8; 32],
                 merkle_root: [0u8; 32],
                 timestamp: 0,
                 nonce: 0,
             },
             txs: vec![],
+            data: None,
         };
         store.put_block(&block).unwrap();
         assert_eq!(store.tip_height().unwrap(), 1);
@@ -401,11 +416,13 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: 1,
                 previous_hash: [0u8; 32],
+                data_hash: [0u8; 32],
                 merkle_root: ledger_core::merkle_root(&[tx1.clone(), tx2.clone()]),
                 timestamp: 0,
                 nonce: 0,
             },
             txs: vec![tx1.clone(), tx2.clone()],
+            data: None,
         };
 
         store.put_block(&block).unwrap();
@@ -427,21 +444,25 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: 1,
                 previous_hash: [0u8; 32],
+                data_hash: [0u8; 32],
                 merkle_root: [0u8; 32],
                 timestamp: 0,
                 nonce: 0,
             },
             txs: vec![],
+            data: None,
         };
         let block3 = Block {
             header: ledger_core::BlockHeader {
                 index: 3,
+                data_hash: [0u8; 32],
                 previous_hash: [0u8; 32],
                 merkle_root: [0u8; 32],
                 timestamp: 0,
                 nonce: 0,
             },
             txs: vec![],
+            data: None,
         };
         store.put_block(&block1).unwrap();
         store.put_block(&block3).unwrap();
@@ -473,11 +494,13 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: 1,
                 previous_hash: [0u8; 32],
+                data_hash: [0u8; 32],
                 merkle_root: ledger_core::merkle_root(&txs),
                 timestamp: 0,
                 nonce: 0,
             },
             txs: txs.clone(),
+            data: None,
         };
         store.put_block(&block).unwrap();
         assert_eq!(store.tip_height().unwrap(), 1);
@@ -499,21 +522,25 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: 1,
                 previous_hash: [0u8; 32],
+                data_hash: [0u8; 32],
                 merkle_root: [0u8; 32],
                 timestamp: 0,
                 nonce: 0,
             },
             txs: vec![],
+            data: None,
         };
         let block2 = Block {
             header: ledger_core::BlockHeader {
                 index: 1, // same index as block1
                 previous_hash: [1u8; 32],
+                data_hash: [0u8; 32],
                 merkle_root: [1u8; 32],
                 timestamp: 0,
                 nonce: 0,
             },
             txs: vec![],
+            data: None,
         };
         store.put_block(&block1).unwrap();
         // Storing block2 with the same index will NOT overwrite block1
@@ -534,21 +561,25 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: u64::MAX - 1,
                 previous_hash: [0u8; 32],
+                data_hash: [0u8; 32],
                 merkle_root: [0u8; 32],
                 timestamp: 0,
                 nonce: 0,
             },
             txs: vec![],
+            data: None,
         };
         let block2 = Block {
             header: ledger_core::BlockHeader {
                 index: u64::MAX,
                 previous_hash: block1.hash(),
+                data_hash: [0u8; 32],
                 merkle_root: [1u8; 32],
                 timestamp: 0,
                 nonce: 0,
             },
             txs: vec![],
+            data: None,
         };
         store.put_block(&block1).unwrap();
         store.put_block(&block2).unwrap();
@@ -581,11 +612,13 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: 1,
                 previous_hash: [0u8; 32],
+                data_hash: [0u8; 32],
                 merkle_root: ledger_core::merkle_root(&[tx1.clone(), tx2.clone()]),
                 timestamp: 0,
                 nonce: 0,
             },
             txs: vec![tx1.clone(), tx2.clone()],
+            data: None,
         };
         store.put_block(&block).unwrap();
         assert_eq!(store.tip_height().unwrap(), 1);
@@ -606,11 +639,13 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: 1,
                 previous_hash: [0u8; 32],
+                data_hash: [0u8; 32],
                 merkle_root: [0u8; 32], // merkle root of empty txs
                 timestamp: 0,
                 nonce: 0,
             },
             txs: vec![], // zero transactions
+            data: None,
         };
         store.put_block(&block).unwrap();
         assert_eq!(store.tip_height().unwrap(), 1);
@@ -640,11 +675,13 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: 1,
                 previous_hash: [0u8; 32],
+                data_hash: [0u8; 32],
                 merkle_root: ledger_core::merkle_root(&txs),
                 timestamp: 0,
                 nonce: 0,
             },
             txs: txs.clone(),
+            data: None,
         };
         store.put_block(&block).unwrap();
         assert_eq!(store.tip_height().unwrap(), 1);
@@ -672,11 +709,13 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: 1,
                 previous_hash: [0u8; 32],
+                data_hash: [0u8; 32],
                 merkle_root: ledger_core::merkle_root(&[tx.clone(), tx.clone()]),
                 timestamp: 0,
                 nonce: 0,
             },
             txs: vec![tx.clone(), tx.clone()], // duplicate transactions
+            data: None,
         };
         store.put_block(&block).unwrap();
         assert_eq!(store.tip_height().unwrap(), 1);
@@ -697,31 +736,37 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: u64::MAX - 10,
                 previous_hash: [0u8; 32],
+                data_hash: [0u8; 32],
                 merkle_root: [0u8; 32],
                 timestamp: 0,
                 nonce: 0,
             },
             txs: vec![],
+            data: None,
         };
         let block2 = Block {
             header: ledger_core::BlockHeader {
                 index: u64::MAX - 5,
                 previous_hash: block1.hash(),
+                data_hash: [0u8; 32],
                 merkle_root: [1u8; 32],
                 timestamp: 0,
                 nonce: 0,
             },
             txs: vec![],
+            data: None,
         };
         let block3 = Block {
             header: ledger_core::BlockHeader {
                 index: u64::MAX,
                 previous_hash: block2.hash(),
+                data_hash: [0u8; 32],
                 merkle_root: [2u8; 32],
                 timestamp: 0,
                 nonce: 0,
             },
             txs: vec![],
+            data: None,
         };
         store.put_block(&block1).unwrap();
         store.put_block(&block2).unwrap();
@@ -745,21 +790,25 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: 0,
                 previous_hash: [0u8; 32],
+                data_hash: [0u8; 32],
                 merkle_root: [0u8; 32],
                 timestamp: 0,
                 nonce: 0,
             },
             txs: vec![],
+            data: None,
         };
         let block1 = Block {
             header: ledger_core::BlockHeader {
                 index: 1,
                 previous_hash: block0.hash(),
+                data_hash: [0u8; 32],
                 merkle_root: [1u8; 32],
                 timestamp: 0,
                 nonce: 0,
             },
             txs: vec![],
+            data: None,
         };
         store.put_block(&block0).unwrap();
         store.put_block(&block1).unwrap();
@@ -790,11 +839,13 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: 1,
                 previous_hash: [0u8; 32],
+                data_hash: [0u8; 32],
                 merkle_root: ledger_core::merkle_root(&txs),
                 timestamp: 0,
                 nonce: 0,
             },
             txs: txs.clone(),
+            data: None,
         };
         store.put_block(&block).unwrap();
         assert_eq!(store.tip_height().unwrap(), 1);
@@ -827,11 +878,13 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: 1,
                 previous_hash: [0u8; 32],
+                data_hash: [0u8; 32],
                 merkle_root,
                 timestamp: 0,
                 nonce: 0,
             },
             txs: txs.clone(),
+            data: None,
         };
         store.put_block(&block).unwrap();
         assert_eq!(store.tip_height().unwrap(), 1);
@@ -856,11 +909,13 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: 1,
                 previous_hash: [0u8; 32],
+                data_hash: [0u8; 32],
                 merkle_root: [0u8; 32],
                 timestamp: 0,
                 nonce: 0,
             },
             txs: vec![],
+            data: None,
         };
         store.put_block(&block1).unwrap();
         assert_eq!(store.tip_height().unwrap(), 1);
@@ -869,11 +924,13 @@ mod tests {
             header: ledger_core::BlockHeader {
                 index: 2,
                 previous_hash: block1.hash(),
+                data_hash: [0u8; 32],
                 merkle_root: [1u8; 32],
                 timestamp: 0,
                 nonce: 0,
             },
             txs: vec![],
+            data: None,
         };
         store.put_block(&block2).unwrap();
         dbg!(&store);

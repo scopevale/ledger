@@ -1,8 +1,13 @@
+// pub mod chain;
+pub mod mine;
+
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub type Hash = [u8; 32];
+
+pub type Result<T> = anyhow::Result<T>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Transaction {
@@ -21,20 +26,28 @@ impl PartialEq for Transaction {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct BlockHeader {
     pub index: u64,
     pub previous_hash: Hash,
+    pub data_hash: Hash,
     pub merkle_root: Hash,
     pub timestamp: u64,
     pub nonce: u64,
 }
 
 impl BlockHeader {
-    pub fn new(index: u64, previous_hash: Hash, merkle_root: Hash, nonce: u64) -> Self {
+    pub fn new(
+        index: u64,
+        previous_hash: Hash,
+        data_hash: Hash,
+        merkle_root: Hash,
+        nonce: u64,
+    ) -> Self {
         Self {
             index,
             previous_hash,
+            data_hash,
             merkle_root,
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -48,6 +61,7 @@ impl BlockHeader {
         let mut bytes = Vec::with_capacity(8 + 32 + 32 + 8 + 8);
         bytes.extend_from_slice(&self.index.to_le_bytes());
         bytes.extend_from_slice(&self.previous_hash);
+        bytes.extend_from_slice(&self.data_hash);
         bytes.extend_from_slice(&self.merkle_root);
         bytes.extend_from_slice(&self.timestamp.to_le_bytes());
         bytes.extend_from_slice(&self.nonce.to_le_bytes());
@@ -58,18 +72,34 @@ impl BlockHeader {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Block {
     pub header: BlockHeader,
+    pub data: Option<String>,
     pub txs: Vec<Transaction>,
 }
 
 impl Block {
     pub fn hash(&self) -> Hash {
-        let mut hasher = Sha256::new();
-        hasher.update(self.header.hash_bytes());
-        let digest = hasher.finalize();
-        let mut out = [0u8; 32];
-        out.copy_from_slice(&digest[..]);
-        out
+        block_header_hash(self.header)
     }
+}
+
+pub fn block_header_hash(header: BlockHeader) -> Hash {
+    let mut hasher = Sha256::new();
+    hasher.update(header.hash_bytes());
+    let digest = hasher.finalize();
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&digest[..]);
+    out
+}
+
+pub fn block_data_hash(data: &Option<String>) -> Hash {
+    let mut hasher = Sha256::new();
+    if let Some(d) = data {
+        hasher.update(d.as_bytes());
+    }
+    let digest = hasher.finalize();
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&digest[..]);
+    out
 }
 
 pub fn merkle_root(txs: &[Transaction]) -> Hash {
@@ -113,9 +143,10 @@ pub mod pow {
     use super::{Block, Hash};
     use sha2::{Digest, Sha256};
 
-    /// Mine the block by incrementing nonce until the number of leading zero bits
+    /// Mine the genesis block by incrementing nonce until the number of leading zero bits
     /// in the block hash >= `target_zeros`.
-    pub fn mine_block(mut block: Block, target_zeros: u32) -> Block {
+    /// Use mine_genesis_block only for the genesis block; use chain::Chain::mine_with_txs_parallel for other blocks.
+    pub fn mine_genesis_block(mut block: Block, target_zeros: u32) -> Block {
         loop {
             let mut hasher = Sha256::new();
             hasher.update(block.header.hash_bytes());
@@ -145,6 +176,8 @@ pub mod pow {
 }
 
 pub mod chain {
+    use crate::{mine::mine_block_parallel, pow::mine_genesis_block};
+
     use super::*;
     use anyhow::{Context, Result};
     use std::sync::Arc;
@@ -161,16 +194,16 @@ pub mod chain {
 
     /// Simple chain façade that delegates persistence to a `ChainStore`.
     #[derive(Clone)]
-    pub struct Chain<S: ChainStore> {
-        store: Arc<S>,
+    pub struct Chain<C: ChainStore> {
+        store: Arc<C>,
     }
 
-    impl<S: ChainStore> Chain<S> {
-        pub fn new(store: Arc<S>) -> Self {
+    impl<C: ChainStore> Chain<C> {
+        pub fn new(store: Arc<C>) -> Self {
             Self { store }
         }
 
-        pub fn store(&self) -> &Arc<S> {
+        pub fn store(&self) -> &Arc<C> {
             &self.store
         }
 
@@ -180,10 +213,11 @@ pub mod chain {
             // Height 0 can mean "empty" or "genesis at index 0". Check presence of block 0.
             if height == 0 && self.store.get_block(0)?.is_none() {
                 let genesis = genesis_block();
-                self.store.put_block(&genesis).with_context(|| {
+                let genesis_block = mine_genesis_block(genesis, 20); // Mine genesis hash with 20 leading zero bits
+                self.store.put_block(&genesis_block).with_context(|| {
                     format!(
                         "failed to persist genesis block at index {}",
-                        genesis.header.index
+                        genesis_block.header.index
                     )
                 })?;
             }
@@ -195,36 +229,120 @@ pub mod chain {
             Ok((self.store.tip_height()?, self.store.tip_hash()?))
         }
 
-        /// Build, PoW-mine, and append a block with the provided transactions.
-        pub fn append_block(&self, txs: Vec<Transaction>, target_zeros: u32) -> Result<Block> {
-            let (height, tip_hash) = self.tip()?;
-            let next_index = height + 1; // genesis is index 0
-            let previous_hash = tip_hash.unwrap_or([0u8; 32]);
-            let header = BlockHeader::new(next_index, previous_hash, merkle_root(&txs), 0);
-            let block = Block { header, txs };
-            let mined = pow::mine_block(block, target_zeros);
-            self.store.put_block(&mined).with_context(|| {
-                format!("failed to persist block at index {}", mined.header.index)
+        pub fn mine_with_txs_parallel(
+            &mut self,
+            txs: Vec<Transaction>,
+            data: Option<String>,
+            target: u32,
+        ) -> anyhow::Result<(Block, [u8; 32])> {
+            let index = self.store.tip_height()? + 1;
+            let prev_hash = self.store.tip_hash()?;
+            let (block, hash) = mine_block_parallel(
+                index,
+                prev_hash.expect("tip hash should be available"),
+                txs,
+                data,
+                target,
+            );
+            self.store.put_block(&block).with_context(|| {
+                format!("failed to persist block at index {}", block.header.index)
             })?;
-            Ok(mined)
+
+            Ok((block, hash))
         }
     }
 
     /// A zero-transaction genesis block with zeroed prev-hash and merkle-root.
     pub fn genesis_block() -> Block {
-        let header = BlockHeader::new(0, [0u8; 32], [0u8; 32], 0);
+        let data = Some("Genesis Block".to_string());
+        let data_hash = block_data_hash(&data);
+        let header = BlockHeader::new(0, [0u8; 32], data_hash, [0u8; 32], 0);
         Block {
             header,
             txs: vec![],
+            data,
         }
     }
 }
 
 #[cfg(test)]
+mod inmem_store_tests {
+    use super::*;
+    use crate::chain::{Chain, ChainStore};
+    use std::collections::BTreeMap;
+    use std::sync::{Arc, RwLock};
+
+    #[derive(Default)]
+    struct InMemStore {
+        blocks: RwLock<BTreeMap<u64, Block>>,
+        tip: RwLock<Option<Hash>>,
+    }
+
+    impl ChainStore for InMemStore {
+        fn put_block(&self, block: &Block) -> Result<()> {
+            self.blocks
+                .write()
+                .unwrap()
+                .insert(block.header.index, block.clone());
+            *self.tip.write().unwrap() = Some(block.hash());
+            Ok(())
+        }
+
+        fn get_block(&self, index: u64) -> Result<Option<Block>> {
+            Ok(self.blocks.read().unwrap().get(&index).cloned())
+        }
+
+        fn tip_height(&self) -> Result<u64> {
+            Ok(self
+                .blocks
+                .read()
+                .unwrap()
+                .keys()
+                .next_back()
+                .copied()
+                .unwrap_or(0))
+        }
+
+        fn tip_hash(&self) -> Result<Option<Hash>> {
+            Ok(*self.tip.read().unwrap())
+        }
+
+        fn close(&self) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn mine_block_example_inmem() {
+        let store = InMemStore::default();
+        let mut chain = Chain::new(Arc::new(store));
+        chain.ensure_genesis().unwrap();
+
+        let txs = vec![
+            Transaction {
+                from: "Alice".into(),
+                to: "Bob".into(),
+                amount: 10,
+                timestamp: 1_600_000_000,
+            },
+            Transaction {
+                from: "Bob".into(),
+                to: "Charlie".into(),
+                amount: 5,
+                timestamp: 1_600_000_100,
+            },
+        ];
+
+        let (_b, hash) = chain.mine_with_txs_parallel(txs, None, 16).unwrap();
+        assert!(pow::count_leading_zero_bits(&hash) >= 16);
+    }
+}
+
+#[cfg(test)]
 mod tests {
+    use super::*;
     use std::thread::sleep;
 
-    use super::*;
     #[test]
     fn leading_zero_bits_examples() {
         let mut h = [0u8; 32];
@@ -236,30 +354,6 @@ mod tests {
         assert_eq!(pow::count_leading_zero_bits(&h), 8);
         h[1] = 0x40; // 01000000
         assert_eq!(pow::count_leading_zero_bits(&h), 9);
-    }
-
-    #[test]
-    fn mine_block_example() {
-        let txs = vec![
-            Transaction {
-                from: "Alice".to_string(),
-                to: "Bob".to_string(),
-                amount: 10,
-                timestamp: 1_600_000_000,
-            },
-            Transaction {
-                from: "Bob".to_string(),
-                to: "Charlie".to_string(),
-                amount: 5,
-                timestamp: 1_600_000_100,
-            },
-        ];
-        let merkle = merkle_root(&txs);
-        let header = BlockHeader::new(1, [0u8; 32], merkle, 0);
-        let block = Block { header, txs };
-        let mined = pow::mine_block(block, 16); // Require at least 20 leading zero bits
-        let hash = mined.hash();
-        assert!(pow::count_leading_zero_bits(&hash) >= 16);
     }
 
     #[test]
@@ -314,15 +408,20 @@ mod tests {
                 timestamp: 1_600_000_100,
             },
         ];
+        let data = None;
+        let data_hash = block_data_hash(&data);
         let merkle = merkle_root(&txs);
-        let header = BlockHeader::new(1, [0u8; 32], merkle, 0);
+        let header = BlockHeader::new(1, [0u8; 32], data_hash, merkle, 0);
         let mut block = Block {
             header: header,
             txs,
+            data,
         };
         block.header.timestamp = 1_600_000_200; // Fix timestamp for test consistency
         let hash = block.hash();
-        let expected_hex = "be8f84bd861af54eb5d6bd8d167c322e77f291d6cff94b3a859d3d75c53a925b";
+        // The expected hash value changed from previous versions due to the intentional breaking change
+        // in hash calculation logic, specifically the introduction of the new data_hash field.
+        let expected_hex = "2b342cd99ea480ebc6fa2bc64724ea83f6d3418720ee005d819ba62f2aa684ac";
         assert_eq!(hex::encode(hash), expected_hex);
     }
 
@@ -352,19 +451,20 @@ mod tests {
 
     #[test]
     fn block_header_hash_bytes_example() {
-        let header = BlockHeader::new(1, [0u8; 32], [1u8; 32], 42);
+        let header = BlockHeader::new(1, [0u8; 32], [1u8; 32], [2u8; 32], 42);
         let bytes = header.hash_bytes();
-        assert_eq!(bytes.len(), 88);
+        assert_eq!(bytes.len(), 120);
         assert_eq!(&bytes[0..8], &1u64.to_le_bytes());
         assert_eq!(&bytes[8..40], &[0u8; 32]);
         assert_eq!(&bytes[40..72], &[1u8; 32]);
-        assert_eq!(&bytes[72..80], &header.timestamp.to_le_bytes());
-        assert_eq!(&bytes[80..88], &42u64.to_le_bytes());
+        assert_eq!(&bytes[72..104], &[2u8; 32]);
+        assert_eq!(&bytes[104..112], &header.timestamp.to_le_bytes());
+        assert_eq!(&bytes[112..120], &42u64.to_le_bytes());
     }
 
     #[test]
     fn block_header_new_example() {
-        let header = BlockHeader::new(1, [0u8; 32], [1u8; 32], 42);
+        let header = BlockHeader::new(1, [0u8; 32], [0u8; 32], [1u8; 32], 42);
         assert_eq!(header.index, 1);
         assert_eq!(header.previous_hash, [0u8; 32]);
         assert_eq!(header.merkle_root, [1u8; 32]);
@@ -404,8 +504,12 @@ mod tests {
             },
         ];
         let merkle = merkle_root(&txs);
-        let header = BlockHeader::new(1, [0u8; 32], merkle, 0);
-        let block = Block { header, txs };
+        let header = BlockHeader::new(1, [0u8; 32], [0u8; 32], merkle, 0);
+        let block = Block {
+            header,
+            txs,
+            data: None,
+        };
         let json = serde_json::to_string(&block).unwrap();
         let deserialized: Block = serde_json::from_str(&json).unwrap();
         assert_eq!(block.header.index, deserialized.header.index);
@@ -540,10 +644,11 @@ mod tests {
             },
         ];
         let merkle = merkle_root(&txs);
-        let header = BlockHeader::new(1, [0u8; 32], merkle, 0);
+        let header = BlockHeader::new(1, [0u8; 32], [0u8; 32], merkle, 0);
         let mut block = Block {
             header: header,
             txs,
+            data: None,
         };
         block.header.timestamp = 1_600_000_200; // Fix timestamp for test consistency
         let hash1 = block.hash();
@@ -571,16 +676,18 @@ mod tests {
             },
         ];
         let merkle1 = merkle_root(&txs1);
-        let header1 = BlockHeader::new(1, [0u8; 32], merkle1, 0);
+        let header1 = BlockHeader::new(1, [0u8; 32], [0u8; 32], merkle1, 0);
         let block1 = Block {
             header: header1,
             txs: txs1.clone(),
+            data: None,
         };
         let merkle2 = merkle_root(&txs1);
-        let header2 = BlockHeader::new(1, [0u8; 32], merkle2, 0);
+        let header2 = BlockHeader::new(1, [0u8; 32], [0u8; 32], merkle2, 0);
         let block2 = Block {
             header: header2,
             txs: txs1,
+            data: None,
         };
         assert_eq!(block1.hash(), block2.hash());
     }
@@ -604,17 +711,19 @@ mod tests {
             },
         ];
         let merkle1 = merkle_root(&txs1);
-        let header1 = BlockHeader::new(1, [0u8; 32], merkle1, 0);
+        let header1 = BlockHeader::new(1, [0u8; 32], [0u8; 32], merkle1, 0);
         let block1 = Block {
             header: header1,
             txs: txs1.clone(),
+            data: None,
         };
         sleep(std::time::Duration::from_millis(1000)); // Ensure timestamp would differ
         let merkle2 = merkle_root(&txs1);
-        let header2 = BlockHeader::new(1, [0u8; 32], merkle2, 0);
+        let header2 = BlockHeader::new(1, [0u8; 32], [0u8; 32], merkle2, 0);
         let block2 = Block {
             header: header2,
             txs: txs1,
+            data: None,
         };
         assert_ne!(block1.hash(), block2.hash());
     }
@@ -704,10 +813,11 @@ mod tests {
             },
         ];
         let merkle = merkle_root(&txs);
-        let header = BlockHeader::new(1, [0u8; 32], merkle, 0);
+        let header = BlockHeader::new(1, [0u8; 32], [0u8; 32], merkle, 0);
         let mut block = Block {
             header: header,
             txs,
+            data: None,
         };
         block.header.timestamp = 1_600_000_200; // Fix timestamp for test consistency
         let hash1 = block.hash();

@@ -2,14 +2,39 @@
 All notable changes to **LGR Capstone — Custom Decentralised Ledger** will be documented in this file.
 
 This project adheres to Semantic Versioning and follows a simplified
-“Keep a Changelog” style.
+"Keep a Changelog" style.
+
+## [0.3.0] — 2025-10-23
+### Added
+- **Multi-threaded block mining**:
+  - `Chain::mine_with_txs_parallel()` method for parallel block mining.
+  - `mine::mine_block_parallel()` function to initialize, mine, and persist blocks using multiple threads.
+  - Constants module in `ledger-node` for configuration values.
+- **Block data field**: Added optional `data` field to blocks with proper hashing support.
+- **Additional test coverage**:
+  - Unit tests for `ledger-core` modules.
+  - SLED storage unit and integration tests.
+  - Mempool and chain routing tests.
+
+### Changed
+- Version bump: `ledger-core`, `ledger-storage`, `ledger-node`, and `ledger-cli` to `0.3.0`.
+- Improved data hash handling: store actual `data_hash` even when `data` is `None`, but display as zeros in JSON output.
+
+### Fixed
+- Data hash calculation for blocks with no data (`None` case).
+
+---
 
 ## [0.2.0] — 2025-10-09
 ### Added
 - **Chain façade** in `ledger-core` (`chain` module):
   - `ChainStore` trait (storage interface used by the chain).
-  - `Chain<S>` wrapper with `new()`, `ensure_genesis()`, and `tip() -> (height, tip_hash)`.
+  - `Chain<C>` wrapper with `new()`, `ensure_genesis()`, and `tip() -> (height, tip_hash)`.
   - `genesis_block()` helper.
+  - Add `mempool` with `/tx` ingestion and `/mine` endpoint to mine pending transactions
+  - Expose `/chain/tip` and `/chain/blocks` endpoints; add `SledStore::list_blocks_range`
+  - Add `Chain::append_block` with improved error context in `ensure_genesis`
+
 - **Genesis initialization**: `ledger-node` now constructs `Chain` and calls `ensure_genesis()` at startup.
 - **/health** endpoint in `ledger-node` (kept `/healthz` for convenience/back-compat).
 - **/chain/head** now reads height via `Chain::tip()` (reflects persisted state).
