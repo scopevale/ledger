@@ -1,3 +1,5 @@
+pub mod constants;
+
 use axum::{
     extract::Query,
     routing::{get, post},
@@ -11,6 +13,8 @@ use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::Mutex;
 use tower_http::trace::TraceLayer;
 use tracing::{info, Level};
+
+use crate::constants::{BLOCKS_PER_BATCH, HASH_HEX_SIZE, MAX_BLOCKS_PER_REQUEST};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -195,7 +199,10 @@ async fn main() -> anyhow::Result<()> {
                     let state = state.clone();
                     async move {
                         let (height, _) = state.chain.tip().unwrap_or((0, None));
-                        let limit = p.limit.unwrap_or(25).min(200);
+                        let limit = p
+                            .limit
+                            .unwrap_or(BLOCKS_PER_BATCH)
+                            .min(MAX_BLOCKS_PER_REQUEST);
                         let desc = p.dir.as_deref() != Some("asc");
                         let start = p.start.unwrap_or(height);
 
@@ -218,7 +225,7 @@ async fn main() -> anyhow::Result<()> {
                                 data_hash: if b.data.is_some() {
                                     hex::encode(b.header.data_hash)
                                 } else {
-                                    "0".repeat(64)
+                                    "0".repeat(HASH_HEX_SIZE)
                                 },
                                 data: b.data.clone().unwrap_or_else(|| "No Data".to_string()),
                             })
