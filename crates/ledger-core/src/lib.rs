@@ -437,6 +437,8 @@ mod tests {
         };
         block.header.timestamp = 1_600_000_200; // Fix timestamp for test consistency
         let hash = block.hash();
+        // The expected hash value changed from previous versions due to the intentional breaking change
+        // in hash calculation logic, specifically the introduction of the new data_hash field.
         let expected_hex = "2b342cd99ea480ebc6fa2bc64724ea83f6d3418720ee005d819ba62f2aa684ac";
         assert_eq!(hex::encode(hash), expected_hex);
     }
