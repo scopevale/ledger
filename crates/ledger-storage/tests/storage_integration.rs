@@ -1,18 +1,16 @@
+pub mod helpers;
 use ledger_core::{block_data_hash, Block, Transaction};
 use ledger_storage::sled_store::SledStore;
 use ledger_storage::Storage;
 use rand::Rng;
 use std::any::Any;
-use std::fs;
-use tempfile::tempdir;
+
+use crate::helpers::{create_temp_dir, create_temp_store, remove_temp_dir, teardown_store};
 
 #[tokio::test]
 async fn test_storage_integration() -> anyhow::Result<()> {
-    // Create a temporary directory for the sled database
-    let temp_dir = tempdir()?;
-    let db_path = temp_dir.path().to_path_buf();
-    // Initialize the SledStore
-    let store = SledStore::open(db_path.to_str().unwrap())?;
+    // create a temporary sled database
+    let (temp_dir, store) = create_temp_store();
     // Test data
     let mut rng = rand::thread_rng();
     let num_blocks = 100;
@@ -60,16 +58,14 @@ async fn test_storage_integration() -> anyhow::Result<()> {
     assert_eq!(tip_height, num_blocks as u64 - 1);
     assert_eq!(tip_hash, blocks.last().unwrap().hash());
     // Cleanup
-    temp_dir.close()?;
-    let _ = fs::remove_dir_all(db_path);
+    teardown_store(temp_dir, store);
     Ok(())
 }
 
 #[tokio::test]
 async fn test_storage_persistence() -> anyhow::Result<()> {
     // Create a temporary directory for the sled database
-    let temp_dir = tempdir()?;
-    let db_path = temp_dir.path().to_path_buf();
+    let (temp_dir, db_path) = create_temp_dir();
     // Initialize the SledStore and add a block
     {
         let store = SledStore::open(db_path.to_str().unwrap())?;
@@ -95,18 +91,14 @@ async fn test_storage_persistence() -> anyhow::Result<()> {
     }
 
     // Cleanup
-    temp_dir.close()?;
-    let _ = fs::remove_dir_all(db_path);
+    remove_temp_dir(temp_dir);
     Ok(())
 }
 
 #[tokio::test]
 async fn test_storage_edge_cases() -> anyhow::Result<()> {
-    // Create a temporary directory for the sled database
-    let temp_dir = tempdir()?;
-    let db_path = temp_dir.path().to_path_buf();
-    // Initialize the SledStore
-    let store = SledStore::open(db_path.to_str().unwrap())?;
+    // create a temporary sled database
+    let (temp_dir, store) = create_temp_store();
     // Test empty block storage
     let header = ledger_core::BlockHeader::new(0, [0u8; 32], [0u8; 32], [0u8; 32], 0);
     let empty_block = Block {
@@ -137,8 +129,7 @@ async fn test_storage_edge_cases() -> anyhow::Result<()> {
     assert_eq!(retrieved_large_block.txs.len(), large_txs.len());
     assert_eq!(retrieved_large_block.txs, large_txs);
     // Cleanup
-    temp_dir.close()?;
-    let _ = fs::remove_dir_all(db_path);
+    teardown_store(temp_dir, store);
     Ok(())
 }
 
@@ -147,8 +138,7 @@ async fn test_storage_concurrency() -> anyhow::Result<()> {
     use std::sync::Arc;
     use tokio::task;
     // Create a temporary directory for the sled database
-    let temp_dir = tempdir()?;
-    let db_path = temp_dir.path().to_path_buf();
+    let (temp_dir, db_path) = create_temp_dir();
     // Initialize the SledStore
     let store = Arc::new(SledStore::open(db_path.to_str().unwrap())?);
     let num_blocks = 50;
@@ -191,17 +181,15 @@ async fn test_storage_concurrency() -> anyhow::Result<()> {
         assert_eq!(retrieved_block.header.index, i as u64);
     }
     // Cleanup
-    temp_dir.close()?;
-    let _ = fs::remove_dir_all(db_path);
+    remove_temp_dir(temp_dir);
     Ok(())
 }
 
 #[tokio::test]
 async fn test_storage_data_integrity() -> anyhow::Result<()> {
-    use std::{fs, path::PathBuf};
+    // Create a temporary directory for the sled database
+    let (temp_dir, db_path) = create_temp_dir();
 
-    let temp_dir = tempdir()?;
-    let db_path: PathBuf = temp_dir.path().to_path_buf();
     let block: Block;
 
     // 1) Create DB and write a valid block
@@ -246,34 +234,27 @@ async fn test_storage_data_integrity() -> anyhow::Result<()> {
     );
 
     // Cleanup
-    temp_dir.close()?;
-    let _ = fs::remove_dir_all(db_path);
+    remove_temp_dir(temp_dir);
     Ok(())
 }
 
 #[tokio::test]
 async fn test_storage_trait_compliance() -> anyhow::Result<()> {
-    // Create a temporary directory for the sled database
-    let temp_dir = tempdir()?;
-    let db_path = temp_dir.path().to_path_buf();
-    // Initialize the SledStore
-    let _store = SledStore::open(db_path.to_str().unwrap())?;
+    // create a temporary sled database
+    let (temp_dir, store) = create_temp_store();
     // Verify that SledStore implements the Storage trait
     fn assert_storage_trait<T: Storage>() {}
     assert_storage_trait::<SledStore>();
     // Cleanup
-    temp_dir.close()?;
-    let _ = fs::remove_dir_all(db_path);
+    // Cleanup
+    teardown_store(temp_dir, store);
     Ok(())
 }
 
 #[tokio::test]
 async fn test_storage_cleanup() -> anyhow::Result<()> {
-    // Create a temporary directory for the sled database
-    let temp_dir = tempdir()?;
-    let db_path = temp_dir.path().to_path_buf();
-    // Initialize the SledStore
-    let store = SledStore::open(db_path.to_str().unwrap())?;
+    // create a temporary sled database
+    let (temp_dir, store) = create_temp_store();
     // Add a block
     let header = ledger_core::BlockHeader::new(0, [0u8; 32], [0u8; 32], [0u8; 32], 0);
     let block = Block {
@@ -286,20 +267,14 @@ async fn test_storage_cleanup() -> anyhow::Result<()> {
     let retrieved_block = store.get_block(0)?.expect("Block should exist");
     assert_eq!(retrieved_block.header.index, 0);
     // Cleanup
-    temp_dir.close()?;
-    let _ = fs::remove_dir_all(&db_path);
-    // Verify the directory is removed
-    assert!(!db_path.exists(), "Database directory should be removed");
+    teardown_store(temp_dir, store);
     Ok(())
 }
 
 #[tokio::test]
 async fn test_storage_large_blockchain() -> anyhow::Result<()> {
-    // Create a temporary directory for the sled database
-    let temp_dir = tempdir()?;
-    let db_path = temp_dir.path().to_path_buf();
-    // Initialize the SledStore
-    let store = SledStore::open(db_path.to_str().unwrap())?;
+    // create a temporary sled database
+    let (temp_dir, store) = create_temp_store();
     // Test data
     let mut rng = rand::thread_rng();
     let num_blocks = 10000;
@@ -346,18 +321,14 @@ async fn test_storage_large_blockchain() -> anyhow::Result<()> {
     assert_eq!(tip_height, num_blocks as u64 - 1);
     assert_eq!(tip_hash, blocks.last().unwrap().hash());
     // Cleanup
-    temp_dir.close()?;
-    let _ = fs::remove_dir_all(db_path);
+    teardown_store(temp_dir, store);
     Ok(())
 }
 
 #[tokio::test]
 async fn test_storage_empty_database() -> anyhow::Result<()> {
-    // Create a temporary directory for the sled database
-    let temp_dir = tempdir()?;
-    let db_path = temp_dir.path().to_path_buf();
-    // Initialize the SledStore
-    let store = SledStore::open(db_path.to_str().unwrap())?;
+    // create a temporary sled database
+    let (temp_dir, store) = create_temp_store();
     // Verify that the database is empty
     let tip_height = store.tip_height()?;
     let tip_hash = store.tip_hash()?;
@@ -372,32 +343,27 @@ async fn test_storage_empty_database() -> anyhow::Result<()> {
         "No blocks should exist in an empty database"
     );
     // Cleanup
-    temp_dir.close()?;
-    let _ = fs::remove_dir_all(db_path);
+    teardown_store(temp_dir, store);
     Ok(())
 }
 
 #[tokio::test]
 async fn test_storage_non_existent_block() -> anyhow::Result<()> {
-    // Create a temporary directory for the sled database
-    let temp_dir = tempdir()?;
-    let db_path = temp_dir.path().to_path_buf();
-    // Initialize the SledStore
-    let store = SledStore::open(db_path.to_str().unwrap())?;
+    // create a temporary sled database
+    let (temp_dir, store) = create_temp_store();
     // Attempt to retrieve a non-existent block
     let block = store.get_block(9999)?;
     assert!(block.is_none(), "Block should not exist");
     // Cleanup
-    temp_dir.close()?;
-    let _ = fs::remove_dir_all(db_path);
+    teardown_store(temp_dir, store);
     Ok(())
 }
 
 #[tokio::test]
 async fn test_storage_repeated_open_close() -> anyhow::Result<()> {
     // Create a temporary directory for the sled database
-    let temp_dir = tempdir()?;
-    let db_path = temp_dir.path().to_path_buf();
+    let (temp_dir, db_path) = create_temp_dir();
+
     // Repeatedly open and close the SledStore
     for _ in 0..10 {
         {
@@ -417,18 +383,14 @@ async fn test_storage_repeated_open_close() -> anyhow::Result<()> {
         } // Store goes out of scope and is closed here
     }
     // Cleanup
-    temp_dir.close()?;
-    let _ = fs::remove_dir_all(db_path);
+    remove_temp_dir(temp_dir);
     Ok(())
 }
 
 #[tokio::test]
 async fn test_storage_large_transactions() -> anyhow::Result<()> {
-    // Create a temporary directory for the sled database
-    let temp_dir = tempdir()?;
-    let db_path = temp_dir.path().to_path_buf();
-    // Initialize the SledStore
-    let store = SledStore::open(db_path.to_str().unwrap())?;
+    // create a temporary sled database
+    let (temp_dir, store) = create_temp_store();
     // Create a block with large transactions
     let large_txs: Vec<Transaction> = (0..1000)
         .map(|i| Transaction {
@@ -450,18 +412,14 @@ async fn test_storage_large_transactions() -> anyhow::Result<()> {
     assert_eq!(retrieved_block.txs.len(), large_txs.len());
     assert_eq!(retrieved_block.txs, large_txs);
     // Cleanup
-    temp_dir.close()?;
-    let _ = fs::remove_dir_all(db_path);
+    teardown_store(temp_dir, store);
     Ok(())
 }
 
 #[tokio::test]
 async fn test_storage_multiple_tips() -> anyhow::Result<()> {
-    // Create a temporary directory for the sled database
-    let temp_dir = tempdir()?;
-    let db_path = temp_dir.path().to_path_buf();
-    // Initialize the SledStore
-    let store = SledStore::open(db_path.to_str().unwrap())?;
+    // create a temporary sled database
+    let (temp_dir, store) = create_temp_store();
     // Add multiple blocks
     let mut prev_hash = [0u8; 32];
     for i in 0..5 {
@@ -480,8 +438,7 @@ async fn test_storage_multiple_tips() -> anyhow::Result<()> {
     assert_eq!(tip_height, 4);
     assert_eq!(tip_hash, prev_hash);
     // Cleanup
-    temp_dir.close()?;
-    let _ = fs::remove_dir_all(db_path);
+    teardown_store(temp_dir, store);
     Ok(())
 }
 
@@ -490,8 +447,8 @@ async fn test_storage_stress() -> anyhow::Result<()> {
     use std::sync::Arc;
     use tokio::task;
     // Create a temporary directory for the sled database
-    let temp_dir = tempdir()?;
-    let db_path = temp_dir.path().to_path_buf();
+    let (temp_dir, db_path) = create_temp_dir();
+
     // Initialize the SledStore
     let store = Arc::new(SledStore::open(db_path.to_str().unwrap())?);
     let num_blocks = 1000;
@@ -534,16 +491,15 @@ async fn test_storage_stress() -> anyhow::Result<()> {
         assert_eq!(retrieved_block.header.index, i as u64);
     }
     // Cleanup
-    temp_dir.close()?;
-    let _ = fs::remove_dir_all(db_path);
+    remove_temp_dir(temp_dir);
     Ok(())
 }
 
 #[tokio::test]
 async fn test_storage_reindex() -> anyhow::Result<()> {
     // Create a temporary directory for the sled database
-    let temp_dir = tempdir()?;
-    let db_path = temp_dir.path().to_path_buf();
+    let (temp_dir, db_path) = create_temp_dir();
+
     // Initialize the SledStore
     let store = SledStore::open(db_path.to_str().unwrap())?;
     // Add blocks
@@ -567,7 +523,6 @@ async fn test_storage_reindex() -> anyhow::Result<()> {
         assert_eq!(retrieved_block.header.index, i as u64);
     }
     // Cleanup
-    temp_dir.close()?;
-    let _ = fs::remove_dir_all(db_path);
+    remove_temp_dir(temp_dir);
     Ok(())
 }

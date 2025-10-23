@@ -229,28 +229,6 @@ pub mod chain {
             Ok((self.store.tip_height()?, self.store.tip_hash()?))
         }
 
-        // /// Build, PoW-mine, and append a block with the provided transactions.
-        // /// deprecated: use mine_with_txs_parallel instead.
-        // pub fn append_block(&mut self, txs: Vec<Transaction>, target_zeros: u32) -> Result<Block> {
-        //     let (height, _) = self.tip()?;
-        //     let data = None;
-        //     // let data_hash = block_data_hash(&data); // Placeholder, not used in this example
-        //     let next_index = height + 1; // genesis is index 0
-        //
-        //     // let previous_hash = tip_hash.unwrap_or([0u8; 32]);
-        //     // let header =
-        //     // BlockHeader::new(next_index, previous_hash, data_hash, merkle_root(&txs), 0);
-        //     // let block = Block { header, data, txs };
-        //
-        //     let (mined, _) = self
-        //         .mine_with_txs_parallel(txs, data, target_zeros)
-        //         .with_context(|| format!("failed to mine block at index {}", next_index))?;
-        //     self.store.put_block(&mined).with_context(|| {
-        //         format!("failed to persist block at index {}", mined.header.index)
-        //     })?;
-        //     Ok(mined)
-        // }
-
         pub fn mine_with_txs_parallel(
             &mut self,
             txs: Vec<Transaction>,
@@ -309,9 +287,11 @@ mod inmem_store_tests {
             *self.tip.write().unwrap() = Some(block.hash());
             Ok(())
         }
+
         fn get_block(&self, index: u64) -> Result<Option<Block>> {
             Ok(self.blocks.read().unwrap().get(&index).cloned())
         }
+
         fn tip_height(&self) -> Result<u64> {
             Ok(self
                 .blocks
@@ -322,9 +302,11 @@ mod inmem_store_tests {
                 .copied()
                 .unwrap_or(0))
         }
+
         fn tip_hash(&self) -> Result<Option<Hash>> {
             Ok(*self.tip.read().unwrap())
         }
+
         fn close(&self) -> Result<()> {
             Ok(())
         }
