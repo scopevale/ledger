@@ -25,7 +25,7 @@ async fn test_storage_integration() -> anyhow::Result<()> {
             blocks[i - 1].hash()
         };
         let data = None;
-        let data_hash = block_data_hash(&data); // Placeholder, not used in this example
+        let data_hash = block_data_hash(&data); // data_hash is used in BlockHeader, but its value is arbitrary for this test
         let merkle_root: [u8; 32] = rng.gen();
         let header =
             ledger_core::BlockHeader::new(i as u64, prev_hash, data_hash, merkle_root, rng.gen());

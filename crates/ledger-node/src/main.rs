@@ -151,7 +151,7 @@ async fn main() -> anyhow::Result<()> {
                     let mut state = state.clone();
                     async move {
                         let target_zeros = params.target.unwrap_or(20);
-                        let data = params.data.or(None);
+                        let data = params.data;
                         let txs = {
                             let mut mp = state.mempool.lock().await;
                             if mp.is_empty() {
