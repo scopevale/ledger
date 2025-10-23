@@ -35,10 +35,10 @@ pub fn clear_store(store: &SledStore) {
 
 pub fn teardown_store(temp_dir: tempfile::TempDir, store: SledStore) {
     let db_path = temp_dir.path().to_path_buf();
+    clear_store(&store);
     temp_dir.close().expect("Failed to delete temp dir");
     let _ = fs::remove_dir_all(&db_path);
     // Verify the directory is removed
     assert!(!db_path.exists(), "Database directory should be removed");
-    clear_store(&store);
     drop(store);
 }
