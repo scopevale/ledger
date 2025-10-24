@@ -234,6 +234,19 @@ async fn main() -> anyhow::Result<()> {
                 }
             }),
         )
+        .route(
+            "/mempool",
+            get({
+                let state = state.clone();
+                move || {
+                    let _state = state.clone();
+                    async move {
+                        let mp = state.mempool.lock().await;
+                        Json(mp.clone())
+                    }
+                }
+            }),
+        )
         .layer(TraceLayer::new_for_http());
 
     let addr: SocketAddr = args.listen.parse()?;
