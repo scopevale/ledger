@@ -74,6 +74,7 @@ struct BlockRow {
     ts: u64,
     tx_count: usize,
     hash: String,
+    nonce: u64,
     previous_hash: String,
     merkle_root: String,
     data_hash: String,
@@ -218,6 +219,7 @@ async fn main() -> anyhow::Result<()> {
                                 ts: b.header.timestamp,
                                 tx_count: b.txs.len(),
                                 hash: hex::encode(b.hash()),
+                                nonce: b.header.nonce,
                                 previous_hash: hex::encode(b.header.previous_hash),
                                 merkle_root: hex::encode(b.header.merkle_root),
                                 data_hash: if b.data.is_some() {

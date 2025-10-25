@@ -53,12 +53,24 @@ struct BlockRow {
     nonce: u64,
     hash: String,
     previous_hash: String,
-    _merkle_root: String,
-    _data_hash: String,
+    merkle_root: String,
+    data_hash: String,
     tx_count: usize,
-    _target: u32,
-    _data: String,
+    // _target: u32,
+    data: String,
 }
+
+// {
+//   "index": 19,
+//   "ts": 1761335941,
+//   "tx_count": 0,
+//   "hash": "00000077502d083033ad6b490f1005c9d892c869e36e635b730acbad6e41a6f9",
+//   "nonce": 1690083,
+//   "previous_hash": "0000006ce2603c0644e61e2db5cf41996d7aa651d1cf8bc1282deef12c3460cc",
+//   "merkle_root": "0000000000000000000000000000000000000000000000000000000000000000",
+//   "data_hash": "036dc85a161926e206b0ab9beb7fa6737e5f11a6ac55f85bcc305f930d2f372e",
+//   "data": "test datadffdfdffdfdfdfdfdfdfdfllfdfddffsdfsdfsdfsdfsdfsd"
+// },
 
 #[derive(Debug, Clone, Serialize)]
 struct TxIn {
@@ -170,11 +182,11 @@ impl App {
             .and_then(|r| r.error_for_status())
         {
             Ok(resp) => match resp.json::<Vec<BlockRow>>().await {
-                Ok(mut rows) => {
-                    dbg!(&rows);
-                    if desc {
-                        rows.reverse();
-                    }
+                Ok(rows) => {
+                    // dbg!(&rows);
+                    // if desc {
+                    //     rows.reverse();
+                    // }
                     self.chain_rows = rows;
                     self.chain_cursor = 0;
                 }
@@ -292,7 +304,7 @@ async fn main() -> Result<()> {
 
     let mut app = App::new(args.clone());
     app.refresh_dashboard().await;
-    app.load_chain_page(None, 25, true).await;
+    app.load_chain_page(None, 50, true).await;
     app.update_hash_demo();
 
     let res = run_app(&mut terminal, &mut app).await;
@@ -350,7 +362,7 @@ async fn handle_key(app: &mut App, key: KeyEvent) -> Result<bool> {
         }
         KeyCode::Char('r') => {
             app.refresh_dashboard().await;
-            app.load_chain_page(None, 25, true).await;
+            app.load_chain_page(None, 50, true).await;
         }
         // Chain view navigation
         KeyCode::Down => {
@@ -493,6 +505,9 @@ fn render_chain<B: Backend>(f: &mut Frame, area: Rect, app: &App) {
             Cell::from(b.hash.clone()),
             Cell::from(b.previous_hash.clone()),
             Cell::from(b.tx_count.to_string()),
+            Cell::from(b.merkle_root.clone()),
+            Cell::from(b.data_hash.clone()),
+            Cell::from(b.data.clone()),
         ])
         .style(if i == app.chain_cursor {
             Style::default().add_modifier(Modifier::REVERSED)
