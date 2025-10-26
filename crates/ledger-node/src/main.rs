@@ -241,7 +241,7 @@ async fn main() -> anyhow::Result<()> {
             get({
                 let state = state.clone();
                 move || {
-                    let _state = state.clone();
+                    let state = state.clone();
                     async move {
                         let mp = state.mempool.lock().await;
                         Json(mp.clone())

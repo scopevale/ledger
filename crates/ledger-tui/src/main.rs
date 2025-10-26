@@ -60,23 +60,19 @@ struct BlockRow {
     data: String,
 }
 
-// {
-//   "index": 19,
-//   "ts": 1761335941,
-//   "tx_count": 0,
-//   "hash": "00000077502d083033ad6b490f1005c9d892c869e36e635b730acbad6e41a6f9",
-//   "nonce": 1690083,
-//   "previous_hash": "0000006ce2603c0644e61e2db5cf41996d7aa651d1cf8bc1282deef12c3460cc",
-//   "merkle_root": "0000000000000000000000000000000000000000000000000000000000000000",
-//   "data_hash": "036dc85a161926e206b0ab9beb7fa6737e5f11a6ac55f85bcc305f930d2f372e",
-//   "data": "test datadffdfdffdfdfdfdfdfdfdfllfdfddffsdfsdfsdfsdfsdfsd"
-// },
-
 #[derive(Debug, Clone, Serialize)]
 struct TxIn {
     from: String,
     to: String,
     amount: u64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct TxRow {
+    from: String,
+    to: String,
+    amount: u64,
+    timestamp: u64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -101,11 +97,15 @@ struct App {
     // chain list
     chain_rows: Vec<BlockRow>,
     chain_cursor: usize,
+    // mempool tx list
+    tx_rows: Vec<TxRow>,
+    tx_cursor: usize,
     // mempool/tx form
     tx_from: String,
     tx_to: String,
     tx_amount: String,
     tx_status: Option<String>,
+    //
     // mining
     mine_target: u32,
     mine_data: String,
@@ -127,6 +127,8 @@ impl App {
             last_refresh: Instant::now(),
             chain_rows: Vec::new(),
             chain_cursor: 0,
+            tx_rows: Vec::new(),
+            tx_cursor: 0,
             tx_from: "alice".into(),
             tx_to: "bob".into(),
             tx_amount: "42".into(),
@@ -183,10 +185,6 @@ impl App {
         {
             Ok(resp) => match resp.json::<Vec<BlockRow>>().await {
                 Ok(rows) => {
-                    // dbg!(&rows);
-                    // if desc {
-                    //     rows.reverse();
-                    // }
                     self.chain_rows = rows;
                     self.chain_cursor = 0;
                 }
@@ -199,6 +197,40 @@ impl App {
                 self.chain_rows.clear();
                 self.chain_cursor = 0;
                 self.tx_status = Some(format!("Failed to load blocks: {e}"));
+            }
+        }
+    }
+
+    // async fn load_mempool_page(&mut self, start: Option<u64>, limit: u32, desc: bool) {
+    async fn load_mempool_page(&mut self) {
+        let base = &self.args.node;
+        // let dir = if desc { "desc" } else { "asc" };
+        // let mut url = format!("{base}/mempool?limit={limit}&dir={dir}");
+        let url = format!("{base}/mempool");
+        // if let Some(s) = start {
+        //     url.push_str(&format!("&start={s}"));
+        // }
+        match self
+            .http
+            .get(url)
+            .send()
+            .await
+            .and_then(|r| r.error_for_status())
+        {
+            Ok(resp) => match resp.json::<Vec<TxRow>>().await {
+                Ok(rows) => {
+                    self.tx_rows = rows;
+                    self.tx_cursor = 0;
+                }
+                Err(e) => {
+                    self.tx_rows.clear();
+                    self.tx_status = Some(format!("Failed to decode transactions: {e}"));
+                }
+            },
+            Err(e) => {
+                self.tx_rows.clear();
+                self.tx_cursor = 0;
+                self.tx_status = Some(format!("Failed to load transactions: {e}"));
             }
         }
     }
@@ -305,6 +337,7 @@ async fn main() -> Result<()> {
     let mut app = App::new(args.clone());
     app.refresh_dashboard().await;
     app.load_chain_page(None, 50, true).await;
+    app.load_mempool_page().await;
     app.update_hash_demo();
 
     let res = run_app(&mut terminal, &mut app).await;
@@ -363,6 +396,7 @@ async fn handle_key(app: &mut App, key: KeyEvent) -> Result<bool> {
         KeyCode::Char('r') => {
             app.refresh_dashboard().await;
             app.load_chain_page(None, 50, true).await;
+            app.load_mempool_page().await;
         }
         // Chain view navigation
         KeyCode::Down => {
@@ -540,6 +574,7 @@ fn render_mempool<B: Backend>(f: &mut Frame, area: Rect, app: &App) {
         .constraints([
             Constraint::Length(5),
             Constraint::Length(3),
+            Constraint::Length(30),
             Constraint::Min(0),
         ])
         .split(area);
@@ -562,11 +597,50 @@ fn render_mempool<B: Backend>(f: &mut Frame, area: Rect, app: &App) {
         .block(Block::default().title("Status").borders(Borders::ALL));
     f.render_widget(status, chunks[1]);
 
+    // render mempool transactions
+    let rows = app.tx_rows.iter().enumerate().map(|(i, tx)| {
+        Row::new(vec![
+            Cell::from(i.to_string()),
+            Cell::from(tx.from.to_string()),
+            Cell::from(tx.to.to_string()),
+            Cell::from(tx.amount.to_string()),
+            Cell::from(tx.timestamp.to_string()),
+        ])
+        .style(if i == app.tx_cursor {
+            Style::default().add_modifier(Modifier::REVERSED)
+        } else {
+            Style::default()
+        })
+    });
+    let table = Table::new(
+        rows.rev(),
+        vec![
+            Constraint::Length(6),
+            Constraint::Length(45),
+            Constraint::Length(45),
+            Constraint::Length(16),
+            Constraint::Length(11),
+        ],
+    )
+    .header(
+        Row::new(vec!["idx", "from", "to", "amount", "ts"])
+            .style(Style::default().add_modifier(Modifier::BOLD)),
+    )
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title("Mempool transactions"),
+    );
+    f.render_widget(table, chunks[2]);
+
+    // let txs = Paragraph::new("").block(Block::default().title("Txs").borders(Borders::ALL));
+    // f.render_widget(txs, chunks[2]);
+
     let hint = Paragraph::new(
         "Tip: This is a minimal form (edit amount digits, use Enter). Extend as needed.",
     )
     .block(Block::default().title("Notes").borders(Borders::ALL));
-    f.render_widget(hint, chunks[2]);
+    f.render_widget(hint, chunks[3]);
 }
 
 fn render_mine<B: Backend>(f: &mut Frame, area: Rect, app: &App) {
@@ -574,7 +648,7 @@ fn render_mine<B: Backend>(f: &mut Frame, area: Rect, app: &App) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3),
-            Constraint::Length(3),
+            Constraint::Length(6),
             Constraint::Min(0),
         ])
         .split(area);
@@ -602,8 +676,8 @@ fn render_hashdemo<B: Backend>(f: &mut Frame, area: Rect, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),
-            Constraint::Length(3),
+            Constraint::Length(8),
+            Constraint::Length(4),
             Constraint::Min(0),
         ])
         .split(area);

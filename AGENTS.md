@@ -1,0 +1,21 @@
+- Build/lint/test commands:
+  - Build: `cargo build --all-targets`
+  - Test (all): `cargo test --all`
+  - Test (single): `cargo test <name> -- --nocapture`
+  - Lint: `cargo clippy --all-targets --all-features -- -D warnings`
+  - Format: `cargo fmt --all` and `cargo fmt --all -- --check`
+- Code Style Guidelines:
+  - Imports: avoid glob; group std/external/crate; explicit paths
+  - Formatting: run `cargo fmt` before commit; respect default 100-char width
+  - Types/Naming: snake_case for functions/vars/modules; CamelCase for types
+  - Error Handling: prefer `Result<T, E>`; use `?`; avoid unwrap in libs
+  - Docs/Comments: doc comments for pub APIs; crate docs with `//!`
+  - Tests: use `#[cfg(test)]` modules and `#[test]` with assertions
+  - Clippy/CI: enable suggestions; treat warnings as errors
+  - Dependencies/CI: pin versions; run `cargo tree` for inspection
+  - Performance: favor iterators; minimize allocations; benchmark where needed
+- Cursor/Copilot Rules:
+  - Cursor rules: none detected
+  - Copilot rules: none detected
+- Pro tip:
+  - Run tests locally before PR and keep commits focused.
