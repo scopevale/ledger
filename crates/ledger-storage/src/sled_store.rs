@@ -508,8 +508,8 @@ mod tests {
         let fetched = store.get_block(1).unwrap().unwrap();
         assert_eq!(fetched.header.index, 1);
         assert_eq!(fetched.txs.len(), 1000);
-        for i in 0..1000 {
-            assert_eq!(fetched.txs[i], txs[i]);
+        for (idx, tx) in fetched.txs.iter().enumerate().take(1000) {
+            assert_eq!(tx, &txs[idx]);
         }
     }
 
@@ -689,8 +689,8 @@ mod tests {
         let fetched = store.get_block(1).unwrap().unwrap();
         assert_eq!(fetched.header.index, 1);
         assert_eq!(fetched.txs.len(), max_txs);
-        for i in 0..max_txs {
-            assert_eq!(fetched.txs[i], txs[i]);
+        for (idx, tx) in fetched.txs.iter().enumerate().take(max_txs) {
+            assert_eq!(tx, &txs[idx]);
         }
     }
 
@@ -853,8 +853,8 @@ mod tests {
         let fetched = store.get_block(1).unwrap().unwrap();
         assert_eq!(fetched.header.index, 1);
         assert_eq!(fetched.txs.len(), 1000);
-        for i in 0..1000 {
-            assert_eq!(fetched.txs[i], txs[i]);
+        for (idx, tx) in fetched.txs.iter().enumerate().take(1000) {
+            assert_eq!(tx, &txs[idx]);
         }
     }
 
@@ -893,8 +893,8 @@ mod tests {
         assert_eq!(fetched.header.index, 1);
         assert_eq!(fetched.header.merkle_root, merkle_root);
         assert_eq!(fetched.txs.len(), 1000);
-        for i in 0..1000 {
-            assert_eq!(fetched.txs[i], txs[i]);
+        for (idx, tx) in fetched.txs.iter().enumerate().take(1000) {
+            assert_eq!(tx, &txs[idx]);
         }
     }
 

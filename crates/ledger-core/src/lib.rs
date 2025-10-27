@@ -418,11 +418,7 @@ mod tests {
         let data_hash = block_data_hash(&data);
         let merkle = merkle_root(&txs);
         let header = BlockHeader::new(1, [0u8; HASH_SIZE], data_hash, merkle, 0);
-        let mut block = Block {
-            header: header,
-            txs,
-            data,
-        };
+        let mut block = Block { header, txs, data };
         block.header.timestamp = 1_600_000_200; // Fix timestamp for test consistency
         let hash = block.hash();
         // The expected hash value changed from previous versions due to the intentional breaking change
@@ -652,7 +648,7 @@ mod tests {
         let merkle = merkle_root(&txs);
         let header = BlockHeader::new(1, [0u8; HASH_SIZE], [0u8; HASH_SIZE], merkle, 0);
         let mut block = Block {
-            header: header,
+            header,
             txs,
             data: None,
         };
@@ -821,7 +817,7 @@ mod tests {
         let merkle = merkle_root(&txs);
         let header = BlockHeader::new(1, [0u8; HASH_SIZE], [0u8; HASH_SIZE], merkle, 0);
         let mut block = Block {
-            header: header,
+            header,
             txs,
             data: None,
         };

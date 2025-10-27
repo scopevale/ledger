@@ -4,9 +4,11 @@
   - Test (single): `cargo test <name> -- --nocapture`
   - Lint: `cargo clippy --all-targets --all-features -- -D warnings`
   - Format: `cargo fmt --all` and `cargo fmt --all -- --check`
+  - Workspace tests: `cargo test --workspace`
+  - Run a single test in a package: `cargo test --package <pkg> --tests -- <testname> --nocapture`
 - Code Style Guidelines:
   - Imports: avoid glob; group std/external/crate; explicit paths
-  - Formatting: run `cargo fmt` before commit; respect default 100-char width
+  - Formatting: run `cargo fmt` before commit; 100-char width
   - Types/Naming: snake_case for functions/vars/modules; CamelCase for types
   - Error Handling: prefer `Result<T, E>`; use `?`; avoid unwrap in libs
   - Docs/Comments: doc comments for pub APIs; crate docs with `//!`
