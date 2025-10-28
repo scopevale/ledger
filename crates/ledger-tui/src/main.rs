@@ -1,7 +1,6 @@
 //! Terminal UI for the ledger node.
 use std::{
     io,
-    // ops::Index,
     time::{Duration, Instant},
 };
 
@@ -15,7 +14,6 @@ use crossterm::{
 use ratatui::{prelude::*, widgets::*};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-// use tracing::debug;
 use tracing_subscriber::{fmt, EnvFilter};
 
 #[derive(Parser, Debug, Clone)]
@@ -56,7 +54,6 @@ struct BlockRow {
     merkle_root: String,
     data_hash: String,
     tx_count: usize,
-    // _target: u32,
     data: String,
 }
 
@@ -201,13 +198,13 @@ impl App {
                 }
                 Err(e) => {
                     self.chain_rows.clear();
-                    self.tx_status = Some(format!("Failed to decode blocks: {e}"));
+                    self.status_message = Some(format!("Failed to decode blocks: {e}"));
                 }
             },
             Err(e) => {
                 self.chain_rows.clear();
                 self.chain_cursor = 0;
-                self.tx_status = Some(format!("Failed to load blocks: {e}"));
+                self.status_message = Some(format!("Failed to load blocks: {e}"));
             }
         }
     }
