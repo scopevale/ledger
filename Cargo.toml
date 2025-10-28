@@ -5,6 +5,7 @@ members = [
     "crates/ledger-storage",
     "crates/ledger-node",
     "crates/ledger-cli",
+    "crates/ledger-tui",
 ]
 
 [workspace.package]

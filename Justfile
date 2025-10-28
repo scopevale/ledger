@@ -11,6 +11,9 @@ run-node:
 run-cli tx sender recipient amount:
     cargo run -p ledger-cli -- submit --node http://127.0.0.1:8080 --from {{sender}} --to {{recipient}} --amount {{amount}}
 
+run-tui:
+    cargo run -p ledger-tui -- --node http://127.0.0.1:8080
+
 test:
     cargo test --all
 

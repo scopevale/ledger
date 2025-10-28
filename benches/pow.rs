@@ -18,7 +18,7 @@ fn bench_pow(c: &mut Criterion) {
             })
             .collect();
 
-        let header = BlockHeader::new(0, [0u8; 32], ledger_core::merkle_root(&txs), 0);
+        let header = BlockHeader::new(0, [0u8; 32], [1u8; 32], ledger_core::merkle_root(&txs), 0);
         let block = Block { header, txs };
 
         b.iter(|| {

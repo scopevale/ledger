@@ -4,6 +4,19 @@ All notable changes to **LGR Capstone — Custom Decentralised Ledger** will be 
 This project adheres to Semantic Versioning and follows a simplified
 "Keep a Changelog" style.
 
+## [0.3.1] — 2025-10-27
+### Added
+- Copilot instructions file (.github/copilot-instructions.md).
+- Documentation updates: AGENTS.md refreshed with expanded guidelines.
+
+### Changed
+- Code-quality improvements across crates: ledger-core (redundant field names), ledger-storage (test iteration), ledger-tui (render callbacks and casts).
+
+### Fixed
+- Addressed Clippy warnings and lint-related test adjustments to improve CI reliability.
+
+---
+
 ## [0.3.0] — 2025-10-23
 ### Added
 - **Multi-threaded block mining**:

@@ -1,5 +1,3 @@
-pub mod constants;
-
 use axum::{
     extract::Query,
     routing::{get, post},
@@ -14,7 +12,7 @@ use tokio::sync::Mutex;
 use tower_http::trace::TraceLayer;
 use tracing::{info, Level};
 
-use crate::constants::{BLOCKS_PER_BATCH, HASH_HEX_SIZE, MAX_BLOCKS_PER_REQUEST};
+use ledger_core::constants::{BLOCKS_PER_BATCH, HASH_HEX_SIZE, MAX_BLOCKS_PER_REQUEST};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -76,6 +74,7 @@ struct BlockRow {
     ts: u64,
     tx_count: usize,
     hash: String,
+    nonce: u64,
     previous_hash: String,
     merkle_root: String,
     data_hash: String,
@@ -220,6 +219,7 @@ async fn main() -> anyhow::Result<()> {
                                 ts: b.header.timestamp,
                                 tx_count: b.txs.len(),
                                 hash: hex::encode(b.hash()),
+                                nonce: b.header.nonce,
                                 previous_hash: hex::encode(b.header.previous_hash),
                                 merkle_root: hex::encode(b.header.merkle_root),
                                 data_hash: if b.data.is_some() {
@@ -232,6 +232,19 @@ async fn main() -> anyhow::Result<()> {
                             .collect();
 
                         Json(rows)
+                    }
+                }
+            }),
+        )
+        .route(
+            "/mempool",
+            get({
+                let state = state.clone();
+                move || {
+                    let state = state.clone();
+                    async move {
+                        let mp = state.mempool.lock().await;
+                        Json(mp.clone())
                     }
                 }
             }),
