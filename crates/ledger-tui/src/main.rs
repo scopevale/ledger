@@ -96,6 +96,8 @@ struct App {
     chain_cursor: usize,
     chain_state: TableState,
     chain_scroll: ScrollbarState,
+    chain_status: Option<String>,
+    chain_popup: bool,
     // mempool tx list
     tx_rows: Vec<TxRow>,
     tx_cursor: usize,
@@ -133,6 +135,8 @@ impl App {
             chain_cursor: 0,
             chain_state: TableState::default(),
             chain_scroll: ScrollbarState::default(),
+            chain_status: None,
+            chain_popup: false,
             tx_rows: Vec::new(),
             tx_cursor: 0,
             tx_state: TableState::default(),
@@ -198,13 +202,13 @@ impl App {
                 }
                 Err(e) => {
                     self.chain_rows.clear();
-                    self.status_message = Some(format!("Failed to decode blocks: {e}"));
+                    self.chain_status = Some(format!("Failed to decode blocks: {e}"));
                 }
             },
             Err(e) => {
                 self.chain_rows.clear();
                 self.chain_cursor = 0;
-                self.status_message = Some(format!("Failed to load blocks: {e}"));
+                self.chain_status = Some(format!("Failed to load blocks: {e}"));
             }
         }
     }
