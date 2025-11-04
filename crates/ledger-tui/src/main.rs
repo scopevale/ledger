@@ -11,7 +11,13 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ratatui::{prelude::*, widgets::*};
+use ratatui::{
+    // layout::*,
+    layout::{Constraint, Direction, Flex, Layout, Rect},
+    prelude::*,
+    widgets::*,
+    Frame,
+};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tracing_subscriber::{fmt, EnvFilter};
@@ -436,7 +442,7 @@ async fn main() -> Result<()> {
 
 async fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> {
     loop {
-        terminal.draw(|f| ui::<B>(f, app))?;
+        terminal.draw(|f| ui(f, app))?;
 
         if crossterm::event::poll(Duration::from_millis(200))? {
             if let CEvent::Key(key) = event::read()? {
@@ -493,6 +499,11 @@ async fn handle_key(app: &mut App, key: KeyEvent) -> Result<bool> {
                 app.previous_row().await;
             }
         }
+        KeyCode::Char('p') => {
+            if app.tab == Tab::Chain {
+                app.chain_popup = !app.chain_popup;
+            }
+        }
         _ => {
             if app.tab == Tab::Mempool {
                 match key.code {
@@ -544,7 +555,7 @@ async fn handle_key(app: &mut App, key: KeyEvent) -> Result<bool> {
     Ok(false)
 }
 
-fn ui<B: Backend>(f: &mut Frame, app: &mut App) {
+fn ui(f: &mut Frame, app: &mut App) {
     let size = f.area();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -650,6 +661,14 @@ fn render_chain(f: &mut Frame, area: Rect, app: &mut App) {
     )
     .block(Block::default().borders(Borders::ALL).title("Chain blocks"));
     f.render_stateful_widget(table, area, &mut app.chain_state);
+
+    if app.chain_popup {
+        let popup = Block::bordered().title("Popup");
+        let popup_area = centered_area(area, 60, 20);
+        // clears out any background in the area before rendering the popup
+        f.render_widget(Clear, popup_area);
+        f.render_widget(popup, popup_area);
+    }
 }
 
 fn render_mempool(f: &mut Frame, area: Rect, app: &mut App) {
@@ -713,7 +732,6 @@ fn render_mempool(f: &mut Frame, area: Rect, app: &mut App) {
     .block(
         Block::default()
             .borders(Borders::ALL)
-            // .scroll((app.tx_cursor as u16).saturating_sub(29), 0)
             .title("Mempool transactions"),
     );
     f.render_stateful_widget(table, chunks[2], &mut app.tx_state);
@@ -780,4 +798,90 @@ fn render_hashdemo(f: &mut Frame, area: Rect, app: &App) {
     )
     .block(Block::default().borders(Borders::ALL).title("Help"));
     f.render_widget(help, chunks[2]);
+}
+
+/// Create a centered rect using the given percentage of the available rect
+fn centered_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
+    // vertically center a strip that's percent_y tall
+    let vertical = Layout::vertical([Constraint::Percentage(percent_y)]).flex(Flex::Center);
+    let [area] = vertical.areas(area);
+
+    // horizontally center a strip that's percent_x wide within that strip
+    let horizontal = Layout::horizontal([Constraint::Percentage(percent_x)]).flex(Flex::Center);
+    let [area] = horizontal.areas(area);
+
+    area
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    // tokio for async tests
+    #[tokio::test]
+    async fn test_tab_transitions_via_handle_key() {
+        let args = Args {
+            node: "http://localhost:8080".to_string(),
+        };
+        let mut app = App::new(args);
+        assert_eq!(app.tab, Tab::Dashboard);
+
+        // Tab -> Chain
+        let key_tab = KeyEvent {
+            kind: event::KeyEventKind::Press,
+            state: event::KeyEventState::NONE,
+            code: KeyCode::Tab,
+            modifiers: KeyModifiers::NONE,
+        };
+        let _ = handle_key(&mut app, key_tab).await.unwrap();
+        assert_eq!(app.tab, Tab::Chain);
+
+        // BackTab -> Dashboard
+        let key_back = KeyEvent {
+            kind: event::KeyEventKind::Press,
+            state: event::KeyEventState::NONE,
+            code: KeyCode::BackTab,
+            modifiers: KeyModifiers::NONE,
+        };
+        let _ = handle_key(&mut app, key_back).await.unwrap();
+        assert_eq!(app.tab, Tab::Dashboard);
+    }
+
+    #[tokio::test]
+    async fn test_update_hash_demo_and_hash_consistency() {
+        let args = Args {
+            node: "http://localhost:8080".to_string(),
+        };
+        let mut app = App::new(args);
+
+        app.hash_input = "test-input".to_string();
+        app.update_hash_demo();
+        assert_eq!(app.hash_output.len(), 64); // 64 hex chars
+
+        // Local deterministic check of leading zeros calculation
+        fn leading_zeros_of_hex(s: &str) -> u32 {
+            let bytes = s.as_bytes();
+            let mut bits = 0u32;
+            for &b in bytes {
+                let v = match b {
+                    b'0' => 0,
+                    b'1'..=b'9' => b - b'0',
+                    b'a'..=b'f' => 10 + (b - b'a'),
+                    b'A'..=b'F' => 10 + (b - b'A'),
+                    _ => 0,
+                };
+                if v == 0 {
+                    bits += 4;
+                } else {
+                    bits += v.leading_zeros() - 4;
+                    break;
+                }
+            }
+            bits
+        }
+
+        let expected = leading_zeros_of_hex(&app.hash_output);
+        assert_eq!(app.hash_leading_zeros, expected);
+    }
 }

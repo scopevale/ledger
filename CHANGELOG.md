@@ -6,6 +6,10 @@ This project adheres to Semantic Versioning and follows a simplified
 
 ## [0.3.1] — 2025-10-27
 ### Added
+- **New TUI application** in `ledger-tui` crate:
+  - Interactive terminal UI to visualize the blockchain state.
+  - Features include block list, block details, and real-time updates.
+  - Built using the `ratatui` and `crossterm` crates for terminal
 - Copilot instructions file (.github/copilot-instructions.md).
 - Documentation updates: AGENTS.md refreshed with expanded guidelines.
 
