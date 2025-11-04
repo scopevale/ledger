@@ -104,6 +104,7 @@ struct App {
     chain_scroll: ScrollbarState,
     chain_status: Option<String>,
     chain_popup: bool,
+    tx_popup: bool,
     // mempool tx list
     tx_rows: Vec<TxRow>,
     tx_cursor: usize,
@@ -143,6 +144,7 @@ impl App {
             chain_scroll: ScrollbarState::default(),
             chain_status: None,
             chain_popup: false,
+            tx_popup: false,
             tx_rows: Vec::new(),
             tx_cursor: 0,
             tx_state: TableState::default(),
@@ -502,6 +504,8 @@ async fn handle_key(app: &mut App, key: KeyEvent) -> Result<bool> {
         KeyCode::Char('p') => {
             if app.tab == Tab::Chain {
                 app.chain_popup = !app.chain_popup;
+            } else if app.tab == Tab::Mempool {
+                app.tx_popup = !app.tx_popup;
             }
         }
         _ => {
@@ -574,6 +578,7 @@ fn ui(f: &mut Frame, app: &mut App) {
     let tabs = Tabs::new(titles)
         .select(app.tab as usize)
         .block(Block::default().borders(Borders::ALL).title("ledger-tui"))
+        .style(Style::default().fg(Color::Green))
         .highlight_style(Style::default().fg(Color::Yellow));
     f.render_widget(tabs, chunks[0]);
 
@@ -663,11 +668,34 @@ fn render_chain(f: &mut Frame, area: Rect, app: &mut App) {
     f.render_stateful_widget(table, area, &mut app.chain_state);
 
     if app.chain_popup {
-        let popup = Block::bordered().title("Popup");
-        let popup_area = centered_area(area, 60, 20);
+        // Populate popup with details of the chain block under the cursor, if available
+        let popup = Block::bordered()
+            .style(Style::default().bg(Color::Black).fg(Color::Yellow))
+            .title("Block details")
+            .title_style(Style::new().yellow().bold())
+            .border_style(Style::new().red().bold());
+        let items = if app.chain_rows.is_empty() || app.chain_cursor >= app.chain_rows.len() {
+            vec!["No block selected".to_string()]
+        } else {
+            let b = &app.chain_rows[app.chain_cursor];
+            vec![
+                format!(" Index     : {}", b.index),
+                format!(" Timestamp : {}", b.ts),
+                format!(" Nonce     : {}", b.nonce),
+                format!(" Hash      : {}", b.hash),
+                format!(" Prev hash : {}", b.previous_hash),
+                format!(" Tx count  : {}", b.tx_count),
+                format!(" Merkle    : {}", b.merkle_root),
+                format!(" Data hash : {}", b.data_hash),
+                format!(" Data      : {}", b.data),
+            ]
+        };
+        let list = List::new(items).block(popup.clone());
+        let popup_area = centered_area(area, 60, 25);
         // clears out any background in the area before rendering the popup
         f.render_widget(Clear, popup_area);
         f.render_widget(popup, popup_area);
+        f.render_widget(list, popup_area);
     }
 }
 
@@ -741,6 +769,33 @@ fn render_mempool(f: &mut Frame, area: Rect, app: &mut App) {
     )
     .block(Block::default().title("Notes").borders(Borders::ALL));
     f.render_widget(hint, chunks[3]);
+
+    if app.tx_popup {
+        // Populate popup with details of the chain block under the cursor, if available
+        let popup = Block::bordered()
+            .style(Style::default().bg(Color::Black).fg(Color::Yellow))
+            .title("Transaction details")
+            .title_style(Style::new().yellow().bold())
+            .border_style(Style::new().red().bold());
+        let items = if app.tx_rows.is_empty() || app.tx_cursor >= app.tx_rows.len() {
+            vec!["No transaction selected".to_string()]
+        } else {
+            let tx = &app.tx_rows[app.tx_cursor];
+            vec![
+                format!(" Index     : {}", app.tx_cursor),
+                format!(" From      : {}", tx.from),
+                format!(" To        : {}", tx.to),
+                format!(" Amount    : {}", tx.amount),
+                format!(" Timestamp : {}", tx.timestamp),
+            ]
+        };
+        let list = List::new(items).block(popup.clone());
+        let popup_area = centered_area(area, 30, 16);
+        // clears out any background in the area before rendering the popup
+        f.render_widget(Clear, popup_area);
+        f.render_widget(popup, popup_area);
+        f.render_widget(list, popup_area);
+    }
 }
 
 fn render_mine(f: &mut Frame, area: Rect, app: &App) {
@@ -783,6 +838,7 @@ fn render_hashdemo(f: &mut Frame, area: Rect, app: &App) {
         .split(area);
 
     let input = Paragraph::new(app.hash_input.clone())
+        .wrap(Wrap { trim: true })
         .block(Block::default().borders(Borders::ALL).title("Input"));
     f.render_widget(input, chunks[0]);
 

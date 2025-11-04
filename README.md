@@ -12,6 +12,10 @@ HTTP node, a CLI to submit transactions, and a Criterion benchmark for PoW.
 - `ledger-node` — HTTP API (Axum) exposing `/healthz`, `/chain/head`, `/tx`.
 - `ledger-cli` — CLI to submit transactions to the node via `reqwest`.
 
+## UI Enhancements
+
+- Ledger-UI (ledger-tui) adds a mempool popup showing details of the selected transaction under the cursor. Toggle with 'p' in the Mempool tab to view From, To, Amount, and Timestamp.
+
 ## Build & Run
 
 ```bash
