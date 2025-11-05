@@ -10,7 +10,6 @@ authors = ["LGR Capstone Project - Gary Smith <scopevale@gmail.com>"]
 [dependencies]
 ledger-core = { path = "../ledger-core" }
 anyhow = "1.0.93"
-assert_cmd = "2.0.8"
 crossterm = "0.28.1"
 predicates = "2.1.5"
 ratatui = { version = "0.28.1", default-features = false, features = ["crossterm"] }
