@@ -11,7 +11,13 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ratatui::{prelude::*, widgets::*};
+use ratatui::{
+    // layout::*,
+    layout::{Constraint, Direction, Flex, Layout, Rect},
+    prelude::*,
+    widgets::*,
+    Frame,
+};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tracing_subscriber::{fmt, EnvFilter};
@@ -96,6 +102,9 @@ struct App {
     chain_cursor: usize,
     chain_state: TableState,
     chain_scroll: ScrollbarState,
+    chain_status: Option<String>,
+    chain_popup: bool,
+    tx_popup: bool,
     // mempool tx list
     tx_rows: Vec<TxRow>,
     tx_cursor: usize,
@@ -133,6 +142,9 @@ impl App {
             chain_cursor: 0,
             chain_state: TableState::default(),
             chain_scroll: ScrollbarState::default(),
+            chain_status: None,
+            chain_popup: false,
+            tx_popup: false,
             tx_rows: Vec::new(),
             tx_cursor: 0,
             tx_state: TableState::default(),
@@ -198,13 +210,13 @@ impl App {
                 }
                 Err(e) => {
                     self.chain_rows.clear();
-                    self.status_message = Some(format!("Failed to decode blocks: {e}"));
+                    self.chain_status = Some(format!("Failed to decode blocks: {e}"));
                 }
             },
             Err(e) => {
                 self.chain_rows.clear();
                 self.chain_cursor = 0;
-                self.status_message = Some(format!("Failed to load blocks: {e}"));
+                self.chain_status = Some(format!("Failed to load blocks: {e}"));
             }
         }
     }
@@ -432,7 +444,7 @@ async fn main() -> Result<()> {
 
 async fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> {
     loop {
-        terminal.draw(|f| ui::<B>(f, app))?;
+        terminal.draw(|f| ui(f, app))?;
 
         if crossterm::event::poll(Duration::from_millis(200))? {
             if let CEvent::Key(key) = event::read()? {
@@ -489,6 +501,13 @@ async fn handle_key(app: &mut App, key: KeyEvent) -> Result<bool> {
                 app.previous_row().await;
             }
         }
+        KeyCode::Char('p') => {
+            if app.tab == Tab::Chain {
+                app.chain_popup = !app.chain_popup;
+            } else if app.tab == Tab::Mempool {
+                app.tx_popup = !app.tx_popup;
+            }
+        }
         _ => {
             if app.tab == Tab::Mempool {
                 match key.code {
@@ -540,7 +559,7 @@ async fn handle_key(app: &mut App, key: KeyEvent) -> Result<bool> {
     Ok(false)
 }
 
-fn ui<B: Backend>(f: &mut Frame, app: &mut App) {
+fn ui(f: &mut Frame, app: &mut App) {
     let size = f.area();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -559,6 +578,7 @@ fn ui<B: Backend>(f: &mut Frame, app: &mut App) {
     let tabs = Tabs::new(titles)
         .select(app.tab as usize)
         .block(Block::default().borders(Borders::ALL).title("ledger-tui"))
+        .style(Style::default().fg(Color::Green))
         .highlight_style(Style::default().fg(Color::Yellow));
     f.render_widget(tabs, chunks[0]);
 
@@ -646,6 +666,37 @@ fn render_chain(f: &mut Frame, area: Rect, app: &mut App) {
     )
     .block(Block::default().borders(Borders::ALL).title("Chain blocks"));
     f.render_stateful_widget(table, area, &mut app.chain_state);
+
+    if app.chain_popup {
+        // Populate popup with details of the chain block under the cursor, if available
+        let popup = Block::bordered()
+            .style(Style::default().bg(Color::Black).fg(Color::Yellow))
+            .title("Block details")
+            .title_style(Style::new().yellow().bold())
+            .border_style(Style::new().red().bold());
+        let items = if app.chain_rows.is_empty() || app.chain_cursor >= app.chain_rows.len() {
+            vec!["No block selected".to_string()]
+        } else {
+            let b = &app.chain_rows[app.chain_cursor];
+            vec![
+                format!(" Index     : {}", b.index),
+                format!(" Timestamp : {}", b.ts),
+                format!(" Nonce     : {}", b.nonce),
+                format!(" Hash      : {}", b.hash),
+                format!(" Prev hash : {}", b.previous_hash),
+                format!(" Tx count  : {}", b.tx_count),
+                format!(" Merkle    : {}", b.merkle_root),
+                format!(" Data hash : {}", b.data_hash),
+                format!(" Data      : {}", b.data),
+            ]
+        };
+        let list = List::new(items);
+        let popup_area = centered_area(area, 60, 25);
+        // clears out any background in the area before rendering the popup
+        f.render_widget(Clear, popup_area);
+        f.render_widget(popup, popup_area);
+        f.render_widget(list, popup.inner(popup_area));
+    }
 }
 
 fn render_mempool(f: &mut Frame, area: Rect, app: &mut App) {
@@ -709,7 +760,6 @@ fn render_mempool(f: &mut Frame, area: Rect, app: &mut App) {
     .block(
         Block::default()
             .borders(Borders::ALL)
-            // .scroll((app.tx_cursor as u16).saturating_sub(29), 0)
             .title("Mempool transactions"),
     );
     f.render_stateful_widget(table, chunks[2], &mut app.tx_state);
@@ -719,6 +769,33 @@ fn render_mempool(f: &mut Frame, area: Rect, app: &mut App) {
     )
     .block(Block::default().title("Notes").borders(Borders::ALL));
     f.render_widget(hint, chunks[3]);
+
+    if app.tx_popup {
+        // Populate popup with details of the transaction under the cursor, if available
+        let popup = Block::bordered()
+            .style(Style::default().bg(Color::Black).fg(Color::Yellow))
+            .title("Transaction details")
+            .title_style(Style::new().yellow().bold())
+            .border_style(Style::new().red().bold());
+        let items = if app.tx_rows.is_empty() || app.tx_cursor >= app.tx_rows.len() {
+            vec!["No transaction selected".to_string()]
+        } else {
+            let tx = &app.tx_rows[app.tx_cursor];
+            vec![
+                format!(" Index     : {}", app.tx_cursor),
+                format!(" From      : {}", tx.from),
+                format!(" To        : {}", tx.to),
+                format!(" Amount    : {}", tx.amount),
+                format!(" Timestamp : {}", tx.timestamp),
+            ]
+        };
+        let list = List::new(items);
+        let popup_area = centered_area(area, 30, 16);
+        // clears out any background in the area before rendering the popup
+        f.render_widget(Clear, popup_area);
+        f.render_widget(popup, popup_area);
+        f.render_widget(list, popup_area);
+    }
 }
 
 fn render_mine(f: &mut Frame, area: Rect, app: &App) {
@@ -761,6 +838,7 @@ fn render_hashdemo(f: &mut Frame, area: Rect, app: &App) {
         .split(area);
 
     let input = Paragraph::new(app.hash_input.clone())
+        .wrap(Wrap { trim: true })
         .block(Block::default().borders(Borders::ALL).title("Input"));
     f.render_widget(input, chunks[0]);
 
@@ -776,4 +854,70 @@ fn render_hashdemo(f: &mut Frame, area: Rect, app: &App) {
     )
     .block(Block::default().borders(Borders::ALL).title("Help"));
     f.render_widget(help, chunks[2]);
+}
+
+/// Create a centered rect using the given percentage of the available rect
+fn centered_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
+    // vertically center a strip that's percent_y tall
+    let vertical = Layout::vertical([Constraint::Percentage(percent_y)]).flex(Flex::Center);
+    let [area] = vertical.areas(area);
+
+    // horizontally center a strip that's percent_x wide within that strip
+    let horizontal = Layout::horizontal([Constraint::Percentage(percent_x)]).flex(Flex::Center);
+    let [area] = horizontal.areas(area);
+
+    area
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    // tokio for async tests
+    #[tokio::test]
+    async fn test_tab_transitions_via_handle_key() {
+        let args = Args {
+            node: "http://localhost:8080".to_string(),
+        };
+        let mut app = App::new(args);
+        assert_eq!(app.tab, Tab::Dashboard);
+
+        // Tab -> Chain
+        let key_tab = KeyEvent {
+            kind: event::KeyEventKind::Press,
+            state: event::KeyEventState::NONE,
+            code: KeyCode::Tab,
+            modifiers: KeyModifiers::NONE,
+        };
+        let _ = handle_key(&mut app, key_tab).await.unwrap();
+        assert_eq!(app.tab, Tab::Chain);
+
+        // BackTab -> Dashboard
+        let key_back = KeyEvent {
+            kind: event::KeyEventKind::Press,
+            state: event::KeyEventState::NONE,
+            code: KeyCode::BackTab,
+            modifiers: KeyModifiers::NONE,
+        };
+        let _ = handle_key(&mut app, key_back).await.unwrap();
+        assert_eq!(app.tab, Tab::Dashboard);
+    }
+
+    #[tokio::test]
+    async fn test_update_hash_demo_and_hash_consistency() {
+        let args = Args {
+            node: "http://localhost:8080".to_string(),
+        };
+        let mut app = App::new(args);
+
+        app.hash_input = "test-input".to_string();
+        app.update_hash_demo();
+        assert_eq!(app.hash_output.len(), 64); // 64 hex chars
+
+        // Local deterministic check of leading zeros calculation
+        // Use the shared implementation for leading zeros calculation
+        let expected = count_leading_zero_bits(&app.hash_output);
+        assert_eq!(app.hash_leading_zeros, expected);
+    }
 }

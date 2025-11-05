@@ -4,10 +4,25 @@ All notable changes to **LGR Capstone — Custom Decentralised Ledger** will be 
 This project adheres to Semantic Versioning and follows a simplified
 "Keep a Changelog" style.
 
+## [0.3.2] — 2025-11-04
+### Added
+- Ledger-tui: popup for Chain Blocks showing details of the selected Block under the cursor. Popup toggled with 'p'.
+- Ledger-tui: popup for Mempool transactions showing details of the selected tx under the cursor (From, To, Amount, Timestamp). Popup toggled with 'p' (same as chain).
+### Changed
+- UI: align mempool popup behavior with chain popup; details populate from selected tx.
+### Fixed
+- None
+
+---
+
 ## [0.3.1] — 2025-10-27
 ### Added
-- Copilot instructions file (.github/copilot-instructions.md).
-- Documentation updates: AGENTS.md refreshed with expanded guidelines.
+-- **New TUI application** in `ledger-tui` crate:
+-  - Interactive terminal UI to visualize the blockchain state.
+-  - Features include block list, block details, and real-time updates.
+-  - Built using the `ratatui` and `crossterm` crates for terminal
+-- Copilot instructions file (.github/copilot-instructions.md).
+-- Documentation updates: AGENTS.md refreshed with expanded guidelines.
 
 ### Changed
 - Code-quality improvements across crates: ledger-core (redundant field names), ledger-storage (test iteration), ledger-tui (render callbacks and casts).
