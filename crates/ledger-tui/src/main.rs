@@ -690,12 +690,12 @@ fn render_chain(f: &mut Frame, area: Rect, app: &mut App) {
                 format!(" Data      : {}", b.data),
             ]
         };
-        let list = List::new(items).block(popup.clone());
+        let list = List::new(items);
         let popup_area = centered_area(area, 60, 25);
         // clears out any background in the area before rendering the popup
         f.render_widget(Clear, popup_area);
         f.render_widget(popup, popup_area);
-        f.render_widget(list, popup_area);
+        f.render_widget(list, popup.inner(popup_area));
     }
 }
 
@@ -771,7 +771,7 @@ fn render_mempool(f: &mut Frame, area: Rect, app: &mut App) {
     f.render_widget(hint, chunks[3]);
 
     if app.tx_popup {
-        // Populate popup with details of the chain block under the cursor, if available
+        // Populate popup with details of the transaction under the cursor, if available
         let popup = Block::bordered()
             .style(Style::default().bg(Color::Black).fg(Color::Yellow))
             .title("Transaction details")
@@ -789,7 +789,7 @@ fn render_mempool(f: &mut Frame, area: Rect, app: &mut App) {
                 format!(" Timestamp : {}", tx.timestamp),
             ]
         };
-        let list = List::new(items).block(popup.clone());
+        let list = List::new(items);
         let popup_area = centered_area(area, 30, 16);
         // clears out any background in the area before rendering the popup
         f.render_widget(Clear, popup_area);
@@ -916,28 +916,8 @@ mod tests {
         assert_eq!(app.hash_output.len(), 64); // 64 hex chars
 
         // Local deterministic check of leading zeros calculation
-        fn leading_zeros_of_hex(s: &str) -> u32 {
-            let bytes = s.as_bytes();
-            let mut bits = 0u32;
-            for &b in bytes {
-                let v = match b {
-                    b'0' => 0,
-                    b'1'..=b'9' => b - b'0',
-                    b'a'..=b'f' => 10 + (b - b'a'),
-                    b'A'..=b'F' => 10 + (b - b'A'),
-                    _ => 0,
-                };
-                if v == 0 {
-                    bits += 4;
-                } else {
-                    bits += v.leading_zeros() - 4;
-                    break;
-                }
-            }
-            bits
-        }
-
-        let expected = leading_zeros_of_hex(&app.hash_output);
+        // Use the shared implementation for leading zeros calculation
+        let expected = count_leading_zero_bits(&app.hash_output);
         assert_eq!(app.hash_leading_zeros, expected);
     }
 }
