@@ -691,10 +691,10 @@ fn render_chain(f: &mut Frame, area: Rect, app: &mut App) {
             ]
         };
         let list = List::new(items);
-        let popup_area = centered_area(area, 60, 25);
+        let popup_area = centered_area(area, 60, 28);
         // clears out any background in the area before rendering the popup
         f.render_widget(Clear, popup_area);
-        f.render_widget(popup, popup_area);
+        f.render_widget(&popup, popup_area);
         f.render_widget(list, popup.inner(popup_area));
     }
 }
@@ -793,8 +793,8 @@ fn render_mempool(f: &mut Frame, area: Rect, app: &mut App) {
         let popup_area = centered_area(area, 30, 16);
         // clears out any background in the area before rendering the popup
         f.render_widget(Clear, popup_area);
-        f.render_widget(popup, popup_area);
-        f.render_widget(list, popup_area);
+        f.render_widget(&popup, popup_area);
+        f.render_widget(list, popup.inner(popup_area));
     }
 }
 
@@ -917,7 +917,7 @@ mod tests {
 
         // Local deterministic check of leading zeros calculation
         // Use the shared implementation for leading zeros calculation
-        let expected = count_leading_zero_bits(&app.hash_output);
+        let expected = count_leading_zero_bits(&app.hash_output.as_bytes());
         assert_eq!(app.hash_leading_zeros, expected);
     }
 }
